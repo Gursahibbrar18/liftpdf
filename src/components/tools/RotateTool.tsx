@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { RotateCw, Download, RefreshCw } from "lucide-react";
 import { UploadZone } from "./UploadZone";
 import { rotatePDF, type RotationAngle } from "@/lib/pdf/rotate";
@@ -15,11 +15,15 @@ const ANGLES: { label: string; value: RotationAngle; icon: string }[] = [
   { label: "90° counter-clockwise", value: 270, icon: "↺" },
 ];
 
-export function RotateTool() {
-  const [file, setFile] = useState<File | null>(null);
+interface Props { file?: File; thumbnails?: string[] }
+
+export function RotateTool({ file: fileProp }: Props = {}) {
+  const [file, setFile] = useState<File | null>(fileProp ?? null);
   const [angle, setAngle] = useState<RotationAngle>(90);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState("");
+
+  useEffect(() => { if (fileProp) { setFile(fileProp); setStatus("idle"); } }, [fileProp]);
 
   const onFiles = useCallback((files: File[]) => {
     setFile(files[0]);
@@ -44,17 +48,18 @@ export function RotateTool() {
 
   return (
     <div className="space-y-6">
-      {/* File info */}
-      <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-border">
-        <div>
-          <p className="font-medium text-sm text-foreground">{file.name}</p>
-          <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+      {!fileProp && (
+        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-border">
+          <div>
+            <p className="font-medium text-sm text-foreground">{file.name}</p>
+            <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+          </div>
+          <button onClick={() => { setFile(null); setStatus("idle"); }}
+            className="text-xs text-muted-foreground hover:text-foreground">
+            Change file
+          </button>
         </div>
-        <button onClick={() => { setFile(null); setStatus("idle"); }}
-          className="text-xs text-muted-foreground hover:text-foreground">
-          Change file
-        </button>
-      </div>
+      )}
 
       {/* Angle picker */}
       <div>

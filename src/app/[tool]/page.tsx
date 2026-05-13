@@ -169,14 +169,13 @@ function ComingSoonCard({ name }: { name: string }) {
         {name} is coming soon
       </h2>
       <p className="text-muted-foreground max-w-sm mx-auto mb-6">
-        We&apos;re putting the finishing touches on this tool. Sign up to be
-        notified when it&apos;s ready.
+        We&apos;re putting the finishing touches on this tool. Check back soon — we ship new tools every week.
       </p>
       <Link
-        href="/signup"
+        href="/all-tools"
         className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors"
       >
-        Notify me
+        See all available tools
       </Link>
     </div>
   );

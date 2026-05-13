@@ -1,52 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
-  ChevronDown,
-  Menu,
-  X,
-  Zap,
-  Pencil,
-  GitMerge,
-  Scissors,
-  Archive,
-  FileText,
-  Lock,
-  Stamp,
-  RotateCw,
-  ClipboardList,
-  Eraser,
-  PenLine,
-  LayoutGrid,
-  Trash2,
-  FileOutput,
-  Table,
-  FileSpreadsheet,
-  Image,
-  ImagePlus,
-  ScanText,
-  Unlock,
-  Hash,
-  AlignJustify,
-  Crop,
-  Maximize2,
-  Layers,
-  Wrench,
-  Globe,
-  Replace,
-  Highlighter,
-  ListOrdered,
-  SlidersHorizontal,
-  Grid2x2,
-  MonitorPlay,
-  Presentation,
-  Contrast,
-  FileEdit,
-  FileType,
-  BookOpen,
-  Shuffle,
-  FormInput,
+  ChevronDown, Menu, X, Zap, Pencil, GitMerge, Scissors, Archive, FileText,
+  Lock, Stamp, RotateCw, ClipboardList, Eraser, PenLine, LayoutGrid, Trash2,
+  FileOutput, Table, FileSpreadsheet, Image, ImagePlus, ScanText, Unlock,
+  Hash, AlignJustify, Crop, Maximize2, Layers, Wrench, Globe, Replace,
+  Highlighter, ListOrdered, SlidersHorizontal, Grid2x2, MonitorPlay,
+  Presentation, Contrast, FileEdit, FileType, BookOpen, Shuffle, FormInput,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ALL_CATEGORIES, CATEGORY_META, getToolsByCategory, type ToolCategory } from "@/lib/tools";
@@ -68,11 +30,26 @@ function ToolIcon({ name, className }: { name: string; className?: string }) {
 export function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<ToolCategory | null>(null);
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const openCategory = (cat: ToolCategory) => {
+    clearTimeout(closeTimeoutRef.current);
+    setActiveCategory(cat);
+  };
+
+  const scheduleClose = () => {
+    closeTimeoutRef.current = setTimeout(() => setActiveCategory(null), 150);
+  };
+
+  const cancelClose = () => {
+    clearTimeout(closeTimeoutRef.current);
+  };
 
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-border shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
+
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 flex-shrink-0">
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
@@ -83,56 +60,43 @@ export function Header() {
             </span>
           </Link>
 
-          {/* Desktop mega-menu */}
+          {/* Desktop nav — hover group includes the dropdown via scheduleClose/cancelClose */}
           <nav
             className="hidden lg:flex items-center gap-1"
-            onMouseLeave={() => setActiveCategory(null)}
+            onMouseLeave={scheduleClose}
           >
             {ALL_CATEGORIES.map((cat) => {
               const meta = CATEGORY_META[cat];
               return (
-                <div key={cat} className="relative">
-                  <button
+                <button
+                  key={cat}
+                  className={cn(
+                    "flex items-center gap-1 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                    activeCategory === cat
+                      ? "bg-accent text-primary"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                  )}
+                  onMouseEnter={() => openCategory(cat)}
+                >
+                  {meta.label}
+                  <ChevronDown
                     className={cn(
-                      "flex items-center gap-1 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                      activeCategory === cat
-                        ? "bg-accent text-primary"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                      "w-3.5 h-3.5 transition-transform",
+                      activeCategory === cat && "rotate-180"
                     )}
-                    onMouseEnter={() => setActiveCategory(cat)}
-                  >
-                    {meta.label}
-                    <ChevronDown
-                      className={cn(
-                        "w-3.5 h-3.5 transition-transform",
-                        activeCategory === cat && "rotate-180"
-                      )}
-                    />
-                  </button>
-                </div>
+                  />
+                </button>
               );
             })}
           </nav>
 
-          {/* CTA */}
-          <div className="hidden lg:flex items-center gap-3">
+          {/* Right — just "All Tools" */}
+          <div className="hidden lg:flex items-center gap-4">
             <Link
-              href="/pricing"
+              href="/all-tools"
               className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
             >
-              Pricing
-            </Link>
-            <Link
-              href="/login"
-              className="text-sm font-medium px-4 py-2 rounded-lg border border-border hover:bg-accent transition-colors"
-            >
-              Log in
-            </Link>
-            <Link
-              href="/signup"
-              className="text-sm font-medium px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-            >
-              Sign up free
+              All Tools
             </Link>
           </div>
 
@@ -147,12 +111,12 @@ export function Header() {
         </div>
       </div>
 
-      {/* Mega-menu dropdown */}
+      {/* Mega-menu dropdown — cancelClose keeps it open when mouse enters */}
       {activeCategory && (
         <div
           className="hidden lg:block absolute left-0 right-0 top-full bg-white border-b border-border shadow-lg z-40"
-          onMouseEnter={() => setActiveCategory(activeCategory)}
-          onMouseLeave={() => setActiveCategory(null)}
+          onMouseEnter={cancelClose}
+          onMouseLeave={scheduleClose}
         >
           <div className="max-w-7xl mx-auto px-8 py-6">
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
@@ -165,16 +129,8 @@ export function Header() {
                     className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent transition-colors group"
                     onClick={() => setActiveCategory(null)}
                   >
-                    <div
-                      className={cn(
-                        "w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0",
-                        meta.bg
-                      )}
-                    >
-                      <ToolIcon
-                        name={tool.icon}
-                        className={cn("w-4 h-4", meta.color)}
-                      />
+                    <div className={cn("w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0", meta.bg)}>
+                      <ToolIcon name={tool.icon} className={cn("w-4 h-4", meta.color)} />
                     </div>
                     <div className="min-w-0">
                       <div className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">
@@ -196,6 +152,13 @@ export function Header() {
       {mobileOpen && (
         <div className="lg:hidden bg-white border-t border-border max-h-[80vh] overflow-y-auto">
           <div className="px-4 py-4 space-y-4">
+            <Link
+              href="/all-tools"
+              className="block text-sm font-semibold text-primary pb-2 border-b border-border"
+              onClick={() => setMobileOpen(false)}
+            >
+              All Tools
+            </Link>
             {ALL_CATEGORIES.map((cat) => {
               const meta = CATEGORY_META[cat];
               const tools = getToolsByCategory(cat);
@@ -220,22 +183,6 @@ export function Header() {
                 </div>
               );
             })}
-            <div className="pt-2 border-t border-border flex flex-col gap-2">
-              <Link
-                href="/login"
-                className="text-center text-sm font-medium py-2 rounded-lg border border-border"
-                onClick={() => setMobileOpen(false)}
-              >
-                Log in
-              </Link>
-              <Link
-                href="/signup"
-                className="text-center text-sm font-medium py-2 rounded-lg bg-primary text-primary-foreground"
-                onClick={() => setMobileOpen(false)}
-              >
-                Sign up free
-              </Link>
-            </div>
           </div>
         </div>
       )}

@@ -17,8 +17,10 @@ interface DrawRect {
   canvasW: number; canvasH: number;
 }
 
-export function WhiteoutTool() {
-  const [file, setFile] = useState<File | null>(null);
+interface Props { file?: File; thumbnails?: string[] }
+
+export function WhiteoutTool({ file: fileProp }: Props = {}) {
+  const [file, setFile] = useState<File | null>(fileProp ?? null);
   const [pageUrl, setPageUrl] = useState<string>("");
   const [pdfDims, setPdfDims] = useState({ width: 0, height: 0 });
   const [rects, setRects] = useState<DrawRect[]>([]);
@@ -29,13 +31,8 @@ export function WhiteoutTool() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
 
-  const onFiles = useCallback(async (files: File[]) => {
-    const f = files[0];
-    setFile(f);
-    setRects([]);
-    setStatus("idle");
-
-    /* Render first page to canvas via PDF.js for preview */
+  // Extracted so we can call it both from onFiles and useEffect
+  const renderPreview = useCallback(async (f: File) => {
     const pdfjsLib = await import("pdfjs-dist");
     pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
     const bytes = await f.arrayBuffer();
@@ -46,10 +43,29 @@ export function WhiteoutTool() {
     const canvas = document.createElement("canvas");
     canvas.width = viewport.width;
     canvas.height = viewport.height;
-    // pdfjs-dist v5 takes `canvas` element directly
     await page.render({ canvasContext: canvas.getContext("2d")!, viewport, canvas }).promise;
     setPageUrl(canvas.toDataURL("image/png"));
   }, []);
+
+  // Auto-render when file prop is provided (workspace mode)
+  useEffect(() => {
+    if (fileProp) {
+      setFile(fileProp);
+      setRects([]);
+      setStatus("idle");
+      renderPreview(fileProp);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileProp]);
+
+  const onFiles = useCallback(async (files: File[]) => {
+    const f = files[0];
+    setFile(f);
+    setRects([]);
+    setStatus("idle");
+    renderPreview(f);
+  }, [renderPreview]);
+
 
   /* Redraw overlays on the display canvas */
   useEffect(() => {
@@ -137,7 +153,6 @@ export function WhiteoutTool() {
         <UploadZone onFiles={onFiles} label="Choose PDF to white out" />
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
           <strong>How it works:</strong> Draw rectangles over content to cover it with white.
-          Same approach as Sejda&apos;s whiteout tool — fast and visual.
         </div>
       </div>
     );
@@ -145,14 +160,21 @@ export function WhiteoutTool() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="font-medium text-sm text-foreground">{file.name}</p>
-          <p className="text-xs text-muted-foreground">{rects.length} whiteout area{rects.length !== 1 ? "s" : ""} drawn · Page 1 preview</p>
+      {!fileProp && (
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-medium text-sm text-foreground">{file.name}</p>
+            <p className="text-xs text-muted-foreground">{rects.length} whiteout area{rects.length !== 1 ? "s" : ""} drawn · Page 1 preview</p>
+          </div>
+          <button onClick={() => { setFile(null); setRects([]); setStatus("idle"); }}
+            className="text-xs text-muted-foreground hover:text-foreground">Change file</button>
         </div>
-        <button onClick={() => { setFile(null); setRects([]); setStatus("idle"); }}
-          className="text-xs text-muted-foreground hover:text-foreground">Change file</button>
-      </div>
+      )}
+      {fileProp && (
+        <p className="text-xs text-muted-foreground">
+          {rects.length} whiteout area{rects.length !== 1 ? "s" : ""} drawn · Page 1 preview
+        </p>
+      )}
 
       {/* Canvas preview */}
       {pageUrl && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Download, RefreshCw } from "lucide-react";
 import { UploadZone } from "./UploadZone";
 import { addPageNumbers } from "@/lib/pdf/page-numbers";
@@ -17,12 +17,16 @@ const POSITIONS: { value: Position; label: string }[] = [
   { value: "top-center", label: "Top centre" },
 ];
 
-export function PageNumbersTool() {
-  const [file, setFile] = useState<File | null>(null);
+interface Props { file?: File; thumbnails?: string[] }
+
+export function PageNumbersTool({ file: fileProp }: Props = {}) {
+  const [file, setFile] = useState<File | null>(fileProp ?? null);
   const [position, setPosition] = useState<Position>("bottom-center");
   const [startNumber, setStartNumber] = useState(1);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState("");
+
+  useEffect(() => { if (fileProp) { setFile(fileProp); setStatus("idle"); } }, [fileProp]);
 
   const onFiles = useCallback((files: File[]) => { setFile(files[0]); setStatus("idle"); }, []);
 
@@ -44,13 +48,15 @@ export function PageNumbersTool() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-border">
-        <div>
-          <p className="font-medium text-sm">{file.name}</p>
-          <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+      {!fileProp && (
+        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-border">
+          <div>
+            <p className="font-medium text-sm">{file.name}</p>
+            <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+          </div>
+          <button onClick={() => { setFile(null); setStatus("idle"); }} className="text-xs text-muted-foreground hover:text-foreground">Change file</button>
         </div>
-        <button onClick={() => { setFile(null); setStatus("idle"); }} className="text-xs text-muted-foreground hover:text-foreground">Change file</button>
-      </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <div>

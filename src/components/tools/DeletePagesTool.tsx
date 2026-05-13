@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Download, RefreshCw, Trash2 } from "lucide-react";
 import { UploadZone } from "./UploadZone";
 import { downloadBytes } from "@/lib/download";
@@ -9,12 +9,36 @@ import { cn } from "@/lib/utils";
 
 type Status = "idle" | "processing" | "done" | "error";
 
-export function DeletePagesTool() {
-  const [file, setFile] = useState<File | null>(null);
-  const [pageCount, setPageCount] = useState(0);
+interface Props { file?: File; thumbnails?: string[] }
+
+export function DeletePagesTool({ file: fileProp, thumbnails = [] }: Props = {}) {
+  const [file, setFile]         = useState<File | null>(fileProp ?? null);
+  const [pageCount, setPageCount] = useState(thumbnails.length || 0);
   const [toDelete, setToDelete] = useState<Set<number>>(new Set());
-  const [status, setStatus] = useState<Status>("idle");
-  const [error, setError] = useState("");
+  const [status, setStatus]     = useState<Status>("idle");
+  const [error, setError]       = useState("");
+
+  // Load page count when file prop changes
+  useEffect(() => {
+    if (!fileProp) return;
+    setFile(fileProp);
+    setToDelete(new Set());
+    setStatus("idle");
+    if (thumbnails.length > 0) {
+      setPageCount(thumbnails.length);
+    } else {
+      fileProp.arrayBuffer().then(bytes =>
+        PDFDocument.load(bytes).then(doc => setPageCount(doc.getPageCount()))
+      );
+    }
+  }, [fileProp, thumbnails.length]);
+
+  // Keep pageCount in sync when thumbnails finish loading
+  useEffect(() => {
+    if (thumbnails.length > 0 && thumbnails.length !== pageCount) {
+      setPageCount(thumbnails.length);
+    }
+  }, [thumbnails.length, pageCount]);
 
   const onFiles = useCallback(async (files: File[]) => {
     const f = files[0];
@@ -27,7 +51,7 @@ export function DeletePagesTool() {
   }, []);
 
   const toggle = (i: number) =>
-    setToDelete((prev) => {
+    setToDelete(prev => {
       const next = new Set(prev);
       next.has(i) ? next.delete(i) : next.add(i);
       return next;
@@ -43,11 +67,11 @@ export function DeletePagesTool() {
     setError("");
     try {
       const bytes = await file.arrayBuffer();
-      const src = await PDFDocument.load(bytes);
-      const doc = await PDFDocument.create();
-      const keep = Array.from({ length: pageCount }, (_, i) => i).filter((i) => !toDelete.has(i));
+      const src   = await PDFDocument.load(bytes);
+      const doc   = await PDFDocument.create();
+      const keep  = Array.from({ length: pageCount }, (_, i) => i).filter(i => !toDelete.has(i));
       const pages = await doc.copyPages(src, keep);
-      pages.forEach((p) => doc.addPage(p));
+      pages.forEach(p => doc.addPage(p));
       downloadBytes(await doc.save(), `deleted-pages-${file.name}`);
       setStatus("done");
     } catch {
@@ -58,47 +82,100 @@ export function DeletePagesTool() {
 
   if (!file) return <UploadZone onFiles={onFiles} label="Choose PDF to delete pages from" />;
 
+  const useThumbnails = thumbnails.length > 0;
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-border">
-        <div>
-          <p className="font-medium text-sm">{file.name}</p>
-          <p className="text-xs text-muted-foreground">{pageCount} pages · {toDelete.size} selected for deletion</p>
-        </div>
-        <button onClick={() => { setFile(null); setToDelete(new Set()); setStatus("idle"); }}
-          className="text-xs text-muted-foreground hover:text-foreground">Change file</button>
-      </div>
-
-      <p className="text-sm text-muted-foreground">Click a page number to mark it for deletion. Red = will be deleted.</p>
-
-      <div className="flex flex-wrap gap-2">
-        {Array.from({ length: pageCount }, (_, i) => (
-          <button key={i} onClick={() => toggle(i)}
-            className={cn("w-12 h-12 rounded-xl border text-sm font-semibold transition-all",
-              toDelete.has(i)
-                ? "bg-destructive/10 border-destructive text-destructive"
-                : "bg-white border-border hover:border-primary hover:text-primary")}>
-            {i + 1}
+    <div className="space-y-5">
+      {!fileProp && (
+        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-border">
+          <div>
+            <p className="font-medium text-sm">{file.name}</p>
+            <p className="text-xs text-muted-foreground">{pageCount} pages · {toDelete.size} selected</p>
+          </div>
+          <button onClick={() => { setFile(null); setToDelete(new Set()); setStatus("idle"); }}
+            className="text-xs text-muted-foreground hover:text-foreground">
+            Change file
           </button>
-        ))}
-      </div>
-
-      {toDelete.size > 0 && (
-        <p className="text-sm text-muted-foreground">
-          Keeping {pageCount - toDelete.size} page{pageCount - toDelete.size !== 1 ? "s" : ""}.
-        </p>
+        </div>
       )}
 
-      {error && <div className="bg-destructive/10 text-destructive rounded-xl px-4 py-3 text-sm">{error}</div>}
+      <p className="text-sm text-muted-foreground">
+        {useThumbnails
+          ? "Click a page to mark it for deletion. Red border = will be deleted."
+          : "Click a page number to mark it for deletion. Red = will be deleted."}
+        {toDelete.size > 0 && ` · Keeping ${pageCount - toDelete.size} page${pageCount - toDelete.size !== 1 ? "s" : ""}.`}
+      </p>
 
-      <button onClick={handleDelete} disabled={status === "processing" || toDelete.size === 0}
-        className={cn("flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all",
+      {/* Thumbnail grid (workspace mode) */}
+      {useThumbnails ? (
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 max-h-[420px] overflow-y-auto pr-1">
+          {thumbnails.map((thumb, i) => (
+            <button
+              key={i}
+              onClick={() => toggle(i)}
+              className={cn(
+                "relative rounded-lg border-2 overflow-hidden transition-all group",
+                toDelete.has(i)
+                  ? "border-destructive shadow-destructive/30 shadow-md"
+                  : "border-border hover:border-primary/50"
+              )}
+            >
+              <img src={thumb} alt={`Page ${i + 1}`} className="w-full" />
+              {toDelete.has(i) && (
+                <div className="absolute inset-0 bg-destructive/25 flex items-center justify-center">
+                  <div className="bg-white rounded-full p-1 shadow">
+                    <Trash2 className="w-4 h-4 text-destructive" />
+                  </div>
+                </div>
+              )}
+              <div className={cn(
+                "absolute bottom-0 inset-x-0 text-center text-xs py-0.5 font-medium",
+                toDelete.has(i) ? "bg-destructive text-white" : "bg-black/40 text-white"
+              )}>
+                {i + 1}
+              </div>
+            </button>
+          ))}
+        </div>
+      ) : (
+        /* Numbered buttons fallback (standalone mode) */
+        <div className="flex flex-wrap gap-2">
+          {Array.from({ length: pageCount }, (_, i) => (
+            <button
+              key={i}
+              onClick={() => toggle(i)}
+              className={cn(
+                "w-12 h-12 rounded-xl border text-sm font-semibold transition-all",
+                toDelete.has(i)
+                  ? "bg-destructive/10 border-destructive text-destructive"
+                  : "bg-white border-border hover:border-primary hover:text-primary"
+              )}
+            >
+              {i + 1}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-destructive/10 text-destructive rounded-xl px-4 py-3 text-sm">{error}</div>
+      )}
+
+      <button
+        onClick={handleDelete}
+        disabled={status === "processing" || toDelete.size === 0}
+        className={cn(
+          "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all",
           toDelete.size === 0 ? "bg-muted text-muted-foreground cursor-not-allowed"
             : status === "processing" ? "bg-primary/60 text-white cursor-not-allowed"
-            : status === "done" ? "bg-emerald-600 text-white"
-            : "bg-destructive text-white hover:bg-destructive/90 shadow-lg")}>
+            : status === "done"       ? "bg-emerald-600 text-white"
+            : "bg-destructive text-white hover:bg-destructive/90 shadow-lg"
+        )}
+      >
         {status === "processing" ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-        {status === "processing" ? "Deleting…" : status === "done" ? "Download again" : `Delete ${toDelete.size} page${toDelete.size !== 1 ? "s" : ""}`}
+        {status === "processing" ? "Deleting…"
+          : status === "done"    ? "Download again"
+          : `Delete ${toDelete.size || ""} page${toDelete.size !== 1 ? "s" : ""}`}
       </button>
     </div>
   );

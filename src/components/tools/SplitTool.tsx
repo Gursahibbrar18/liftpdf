@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Download, RefreshCw, Plus, Trash2 } from "lucide-react";
 import { UploadZone } from "./UploadZone";
 import { splitIntoZip, buildPageRanges, type SplitRange } from "@/lib/pdf/split";
@@ -11,24 +11,34 @@ import { cn } from "@/lib/utils";
 type Mode = "ranges" | "all-pages";
 type Status = "idle" | "processing" | "done" | "error";
 
-export function SplitTool() {
-  const [file, setFile] = useState<File | null>(null);
+interface Props { file?: File; thumbnails?: string[] }
+
+export function SplitTool({ file: fileProp }: Props = {}) {
+  const [file, setFile] = useState<File | null>(fileProp ?? null);
   const [pageCount, setPageCount] = useState(0);
   const [mode, setMode] = useState<Mode>("ranges");
   const [ranges, setRanges] = useState<SplitRange[]>([{ label: "part-1", from: 1, to: 1 }]);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState("");
 
-  const onFiles = useCallback(async (files: File[]) => {
-    const f = files[0];
-    setFile(f);
-    setStatus("idle");
+  const loadPageCount = useCallback(async (f: File) => {
     const bytes = await f.arrayBuffer();
     const doc = await PDFDocument.load(bytes);
     const count = doc.getPageCount();
     setPageCount(count);
     setRanges([{ label: "part-1", from: 1, to: count }]);
   }, []);
+
+  useEffect(() => {
+    if (fileProp) { setFile(fileProp); setStatus("idle"); loadPageCount(fileProp); }
+  }, [fileProp, loadPageCount]);
+
+  const onFiles = useCallback(async (files: File[]) => {
+    const f = files[0];
+    setFile(f);
+    setStatus("idle");
+    loadPageCount(f);
+  }, [loadPageCount]);
 
   const addRange = () =>
     setRanges((r) => [...r, { label: `part-${r.length + 1}`, from: 1, to: pageCount }]);
@@ -58,13 +68,15 @@ export function SplitTool() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-border">
-        <div>
-          <p className="font-medium text-sm">{file.name}</p>
-          <p className="text-xs text-muted-foreground">{pageCount} pages · {(file.size / 1024 / 1024).toFixed(2)} MB</p>
+      {!fileProp && (
+        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-border">
+          <div>
+            <p className="font-medium text-sm">{file.name}</p>
+            <p className="text-xs text-muted-foreground">{pageCount} pages · {(file.size / 1024 / 1024).toFixed(2)} MB</p>
+          </div>
+          <button onClick={() => { setFile(null); setStatus("idle"); }} className="text-xs text-muted-foreground hover:text-foreground">Change file</button>
         </div>
-        <button onClick={() => { setFile(null); setStatus("idle"); }} className="text-xs text-muted-foreground hover:text-foreground">Change file</button>
-      </div>
+      )}
 
       {/* Mode */}
       <div className="flex gap-3">
