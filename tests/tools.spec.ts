@@ -128,8 +128,8 @@ test.describe("Page thumbnails in workspace", () => {
     // Wait for at least one thumbnail to appear
     const thumb = page.locator('img[alt="Page 1"]').first();
     await expect(thumb).toBeVisible({ timeout: 15_000 });
-    // Click the parent wrapper div (overlay has pointer-events-none so img receives click)
-    await thumb.click();
+    // force:true bypasses the invisible hover-overlay that Playwright sees as intercepting
+    await thumb.click({ force: true });
     // Modal should open
     await expect(page.getByText(/page 1 of/i)).toBeVisible();
   });
@@ -139,7 +139,7 @@ test.describe("Page thumbnails in workspace", () => {
     await uploadPDF(page);
     const thumb = page.locator('img[alt="Page 1"]').first();
     await expect(thumb).toBeVisible({ timeout: 15_000 });
-    await thumb.click();
+    await thumb.click({ force: true });
     await page.keyboard.press("Escape");
     await expect(page.getByText(/page 1 of/i)).not.toBeVisible();
   });
@@ -159,11 +159,10 @@ test.describe("Delete Pages — thumbnail selection", () => {
     await uploadPDF(page);
     // Switch to Delete Pages tab in workspace
     await page.getByRole("button", { name: /delete pages/i }).click();
-    // Wait for thumbnails
-    const thumb = page.locator('img[alt="Page 1"]').first();
-    await expect(thumb).toBeVisible({ timeout: 15_000 });
-    // Click the page thumbnail card (parent button)
-    await thumb.locator("..").click();
+    // Wait for the DeletePagesTool thumbnail buttons (button wrapper, not workspace-panel div)
+    const thumbButton = page.locator("button").filter({ has: page.locator('img[alt="Page 1"]') });
+    await expect(thumbButton).toBeVisible({ timeout: 15_000 });
+    await thumbButton.click();
     // Delete button should now show "Delete 1 page"
     await expect(page.getByRole("button", { name: /delete 1 page/i })).toBeVisible();
   });
