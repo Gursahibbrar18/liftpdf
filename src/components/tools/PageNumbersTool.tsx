@@ -72,8 +72,8 @@ export function PageNumbersTool({ file: fileProp }: Props = {}) {
           </div>
         </div>
         <div>
-          <label className="block text-sm font-medium text-foreground mb-1.5">Start number</label>
-          <input type="number" min={0} value={startNumber} onChange={(e) => setStartNumber(Number(e.target.value))}
+          <label htmlFor="start-number" className="block text-sm font-medium text-foreground mb-1.5">Start number</label>
+          <input id="start-number" type="number" min={0} value={startNumber} onChange={(e) => setStartNumber(Number(e.target.value))}
             className="w-full border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
         </div>
       </div>

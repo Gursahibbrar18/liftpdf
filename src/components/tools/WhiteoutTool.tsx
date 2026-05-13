@@ -34,7 +34,7 @@ export function WhiteoutTool({ file: fileProp }: Props = {}) {
   // Extracted so we can call it both from onFiles and useEffect
   const renderPreview = useCallback(async (f: File) => {
     const pdfjsLib = await import("pdfjs-dist");
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
     const bytes = await f.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
     const page = await pdf.getPage(1);

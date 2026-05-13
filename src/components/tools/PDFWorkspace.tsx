@@ -49,7 +49,7 @@ export function PDFWorkspace({ initialTool }: { initialTool: string }) {
     try {
       const pdfjsLib = await import("pdfjs-dist");
       pdfjsLib.GlobalWorkerOptions.workerSrc =
-        `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+        `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
       const bytes = await f.arrayBuffer();
       const pdf   = await pdfjsLib.getDocument({ data: bytes }).promise;
       const thumbs: string[] = [];

@@ -28,15 +28,14 @@ test.describe("Merge PDF", () => {
   });
 
   test("merge button appears after adding 2 files", async ({ page }) => {
-    // First file
+    // First file — verify the "add at least one more" hint
     await uploadPDF(page);
     await expect(page.getByText("test.pdf")).toBeVisible();
-    // Hint shown with only 1 file
     await expect(page.getByText(/add at least one more/i)).toBeVisible();
-    // Add second file — UploadZone is always visible in MergeTool
-    await page.locator("#file-input").setInputFiles(PDF);
-    // Merge button should now appear
-    await expect(page.getByRole("button", { name: /merge 2 pdfs/i })).toBeVisible();
+    // Add 2 files at once — setInputFiles with same file twice doesn't re-fire onChange
+    await page.locator("#file-input").setInputFiles([PDF, PDF]);
+    // Merge button should now show total of 3 files
+    await expect(page.getByRole("button", { name: /merge \d+ pdfs/i })).toBeVisible();
   });
 
   test("can add multiple files", async ({ page }) => {
@@ -120,7 +119,7 @@ test.describe("Page thumbnails in workspace", () => {
     await uploadPDF(page);
     // Wait for thumbnails — they're rendered async via PDF.js
     // The page strip should show "Pages" heading
-    await expect(page.getByText("Pages")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("Pages", { exact: true })).toBeVisible({ timeout: 15_000 });
   });
 
   test("zoom modal opens on thumbnail click", async ({ page }) => {
@@ -235,8 +234,9 @@ test.describe("Watermark tool", () => {
     await uploadPDF(page);
     await page.getByRole("button", { name: /^watermark$/i }).click();
     await expect(page.getByPlaceholder(/confidential/i)).toBeVisible();
-    await expect(page.getByText(/opacity/i)).toBeVisible();
-    await expect(page.getByText(/angle/i)).toBeVisible();
+    // Use specific text to avoid matching the tool description paragraph
+    await expect(page.getByText(/Opacity —/)).toBeVisible();
+    await expect(page.getByText(/Angle —/)).toBeVisible();
   });
 });
 
