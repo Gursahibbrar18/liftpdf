@@ -157,8 +157,8 @@ export function PDFWorkspace({ initialTool }: { initialTool: string }) {
                   alt={`Page ${i + 1}`}
                   className="w-full rounded border border-border/50 shadow-sm"
                 />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 rounded transition-colors" />
-                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 rounded transition-colors pointer-events-none" />
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                   <div className="bg-white/90 rounded-full p-1 shadow">
                     <ZoomIn className="w-3.5 h-3.5 text-foreground" />
                   </div>

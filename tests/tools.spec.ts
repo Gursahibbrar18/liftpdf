@@ -126,8 +126,9 @@ test.describe("Page thumbnails in workspace", () => {
     await page.goto("/rotate-pdf");
     await uploadPDF(page);
     // Wait for at least one thumbnail to appear
-    const thumb = page.locator('img[alt="Page 1"]');
+    const thumb = page.locator('img[alt="Page 1"]').first();
     await expect(thumb).toBeVisible({ timeout: 15_000 });
+    // Click the parent wrapper div (overlay has pointer-events-none so img receives click)
     await thumb.click();
     // Modal should open
     await expect(page.getByText(/page 1 of/i)).toBeVisible();
@@ -136,7 +137,7 @@ test.describe("Page thumbnails in workspace", () => {
   test("zoom modal closes on escape", async ({ page }) => {
     await page.goto("/rotate-pdf");
     await uploadPDF(page);
-    const thumb = page.locator('img[alt="Page 1"]');
+    const thumb = page.locator('img[alt="Page 1"]').first();
     await expect(thumb).toBeVisible({ timeout: 15_000 });
     await thumb.click();
     await page.keyboard.press("Escape");
@@ -148,8 +149,9 @@ test.describe("Delete Pages — thumbnail selection", () => {
   test("page thumbnails shown in workspace mode", async ({ page }) => {
     await page.goto("/delete-pdf-pages");
     await uploadPDF(page);
-    // Wait for thumbnails (PDF.js renders async)
-    await expect(page.locator('img[alt="Page 1"]')).toBeVisible({ timeout: 15_000 });
+    // Wait for thumbnails (PDF.js renders async); .first() because both workspace panel
+    // and DeletePagesTool panel render thumbnails with the same alt text
+    await expect(page.locator('img[alt="Page 1"]').first()).toBeVisible({ timeout: 15_000 });
   });
 
   test("clicking a thumbnail marks it for deletion", async ({ page }) => {
