@@ -6,6 +6,17 @@ import { TOOLS, getToolBySlug, CATEGORY_META, getToolsByCategory } from "@/lib/t
 import { ToolWorkspace } from "@/components/tools/ToolWorkspace";
 import { cn } from "@/lib/utils";
 
+// All slugs that have a real working UI — everything else shows "Coming soon"
+const BUILT_SLUGS = new Set([
+  "merge-pdf",
+  "split-pdf",
+  "rotate-pdf",
+  "whiteout-pdf",
+  "watermark-pdf",
+  "page-numbers-pdf",
+  "delete-pdf-pages",
+]);
+
 interface Props {
   params: Promise<{ tool: string }>;
 }
@@ -127,7 +138,7 @@ export default async function ToolPage({ params }: Props) {
 
         {/* Main tool area */}
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-          {tool.comingSoon ? (
+          {tool.comingSoon || !BUILT_SLUGS.has(slug) ? (
             <ComingSoonCard name={tool.name} />
           ) : (
             <ToolWorkspace slug={slug} />

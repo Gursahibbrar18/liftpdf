@@ -13,6 +13,8 @@ export function MergeTool() {
   const [files, setFiles] = useState<File[]>([]);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState("");
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
   const addFiles = useCallback((incoming: File[]) => {
     setFiles((prev) => [...prev, ...incoming]);
@@ -81,7 +83,20 @@ export function MergeTool() {
             {files.map((file, i) => (
               <li
                 key={`${file.name}-${i}`}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 group"
+                draggable
+                onDragStart={() => setDragIdx(i)}
+                onDragOver={(e) => { e.preventDefault(); setDragOverIdx(i); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragIdx !== null && dragIdx !== i) moveFile(dragIdx, i);
+                  setDragIdx(null);
+                  setDragOverIdx(null);
+                }}
+                onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); }}
+                className={cn(
+                  "flex items-center gap-3 px-4 py-3 hover:bg-slate-50 group transition-colors",
+                  dragOverIdx === i && dragIdx !== i && "bg-primary/5 border-l-4 border-primary"
+                )}
               >
                 <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab flex-shrink-0" />
                 <div className="w-8 h-8 bg-red-50 rounded-lg flex items-center justify-center flex-shrink-0">

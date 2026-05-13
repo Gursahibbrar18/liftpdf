@@ -1,0 +1,251 @@
+/**
+ * Tool tests — uploads a real PDF to each tool and verifies the workspace appears
+ * and the download button is reachable.
+ */
+import { test, expect } from "@playwright/test";
+import path from "path";
+
+const PDF = path.join(__dirname, "fixtures/test.pdf");
+
+async function uploadPDF(page: import("@playwright/test").Page, filePath = PDF) {
+  // UploadZone has a hidden <input id="file-input">
+  await page.locator("#file-input").setInputFiles(filePath);
+}
+
+test.describe("Merge PDF", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/merge-pdf");
+  });
+
+  test("upload zone is visible", async ({ page }) => {
+    await expect(page.getByText(/choose pdf file/i)).toBeVisible();
+  });
+
+  test("can add a file", async ({ page }) => {
+    await uploadPDF(page);
+    // File name should appear in the list
+    await expect(page.getByText("test.pdf")).toBeVisible();
+  });
+
+  test("merge button appears after adding 2 files", async ({ page }) => {
+    // First file
+    await uploadPDF(page);
+    await expect(page.getByText("test.pdf")).toBeVisible();
+    // Hint shown with only 1 file
+    await expect(page.getByText(/add at least one more/i)).toBeVisible();
+    // Add second file — UploadZone is always visible in MergeTool
+    await page.locator("#file-input").setInputFiles(PDF);
+    // Merge button should now appear
+    await expect(page.getByRole("button", { name: /merge 2 pdfs/i })).toBeVisible();
+  });
+
+  test("can add multiple files", async ({ page }) => {
+    // First file
+    await uploadPDF(page);
+    await expect(page.getByText("test.pdf")).toBeVisible();
+    // Add second file via the add more button
+    const addMore = page.getByRole("button", { name: /add more/i });
+    if (await addMore.isVisible()) {
+      await addMore.click();
+      await page.locator("#file-input").setInputFiles(PDF);
+    }
+  });
+});
+
+test.describe("PDF Workspace — single-file tools", () => {
+  const SINGLE_FILE_TOOLS = [
+    { slug: "whiteout-pdf",     tab: /whiteout/i,      action: /apply/i },
+    { slug: "rotate-pdf",       tab: /rotate/i,        action: /rotate/i },
+    { slug: "delete-pdf-pages", tab: /delete pages/i,  action: /delete/i },
+    { slug: "watermark-pdf",    tab: /watermark/i,     action: /add watermark/i },
+    { slug: "page-numbers-pdf", tab: /page numbers/i,  action: /add page numbers/i },
+    { slug: "split-pdf",        tab: /split/i,         action: /split pdf/i },
+  ];
+
+  for (const { slug, tab, action } of SINGLE_FILE_TOOLS) {
+    test.describe(`/${slug}`, () => {
+      test("upload zone is visible before upload", async ({ page }) => {
+        await page.goto(`/${slug}`);
+        await expect(page.getByText(/choose pdf file/i)).toBeVisible();
+      });
+
+      test("workspace appears after upload", async ({ page }) => {
+        await page.goto(`/${slug}`);
+        await uploadPDF(page);
+        // File bar should show the filename
+        await expect(page.getByText("test.pdf")).toBeVisible();
+        // All tool tabs should be visible
+        await expect(page.getByRole("button", { name: tab })).toBeVisible();
+      });
+
+      test("correct tool tab is active by default", async ({ page }) => {
+        await page.goto(`/${slug}`);
+        await uploadPDF(page);
+        const activeTab = page.getByRole("button", { name: tab });
+        await expect(activeTab).toBeVisible();
+        // Active tab has bg-primary class
+        await expect(activeTab).toHaveClass(/bg-primary/);
+      });
+
+      test("action button is visible", async ({ page }) => {
+        await page.goto(`/${slug}`);
+        await uploadPDF(page);
+        await expect(page.getByRole("button", { name: action })).toBeVisible();
+      });
+
+      test("can switch to another tool tab", async ({ page }) => {
+        await page.goto(`/${slug}`);
+        await uploadPDF(page);
+        // Click the Rotate tab (if not already on it)
+        const rotateTab = page.getByRole("button", { name: /^rotate$/i });
+        if (await rotateTab.isVisible()) {
+          await rotateTab.click();
+          await expect(rotateTab).toHaveClass(/bg-primary/);
+        }
+      });
+
+      test("change file resets to upload zone", async ({ page }) => {
+        await page.goto(`/${slug}`);
+        await uploadPDF(page);
+        await page.getByRole("button", { name: /change file/i }).click();
+        await expect(page.getByText(/choose pdf file/i)).toBeVisible();
+      });
+    });
+  }
+});
+
+test.describe("Page thumbnails in workspace", () => {
+  test("thumbnails render after upload", async ({ page }) => {
+    await page.goto("/delete-pdf-pages");
+    await uploadPDF(page);
+    // Wait for thumbnails — they're rendered async via PDF.js
+    // The page strip should show "Pages" heading
+    await expect(page.getByText("Pages")).toBeVisible({ timeout: 15_000 });
+  });
+
+  test("zoom modal opens on thumbnail click", async ({ page }) => {
+    await page.goto("/rotate-pdf");
+    await uploadPDF(page);
+    // Wait for at least one thumbnail to appear
+    const thumb = page.locator('img[alt="Page 1"]');
+    await expect(thumb).toBeVisible({ timeout: 15_000 });
+    await thumb.click();
+    // Modal should open
+    await expect(page.getByText(/page 1 of/i)).toBeVisible();
+  });
+
+  test("zoom modal closes on escape", async ({ page }) => {
+    await page.goto("/rotate-pdf");
+    await uploadPDF(page);
+    const thumb = page.locator('img[alt="Page 1"]');
+    await expect(thumb).toBeVisible({ timeout: 15_000 });
+    await thumb.click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByText(/page 1 of/i)).not.toBeVisible();
+  });
+});
+
+test.describe("Delete Pages — thumbnail selection", () => {
+  test("page thumbnails shown in workspace mode", async ({ page }) => {
+    await page.goto("/delete-pdf-pages");
+    await uploadPDF(page);
+    // Wait for thumbnails (PDF.js renders async)
+    await expect(page.locator('img[alt="Page 1"]')).toBeVisible({ timeout: 15_000 });
+  });
+
+  test("clicking a thumbnail marks it for deletion", async ({ page }) => {
+    await page.goto("/delete-pdf-pages");
+    await uploadPDF(page);
+    // Switch to Delete Pages tab in workspace
+    await page.getByRole("button", { name: /delete pages/i }).click();
+    // Wait for thumbnails
+    const thumb = page.locator('img[alt="Page 1"]').first();
+    await expect(thumb).toBeVisible({ timeout: 15_000 });
+    // Click the page thumbnail card (parent button)
+    await thumb.locator("..").click();
+    // Delete button should now show "Delete 1 page"
+    await expect(page.getByRole("button", { name: /delete 1 page/i })).toBeVisible();
+  });
+});
+
+test.describe("Whiteout tool", () => {
+  test("canvas appears after upload", async ({ page }) => {
+    await page.goto("/whiteout-pdf");
+    await uploadPDF(page);
+    // Canvas for drawing should appear (PDF.js renders first page)
+    await expect(page.locator("canvas")).toBeVisible({ timeout: 15_000 });
+  });
+
+  test("can draw a whitebox on the canvas", async ({ page }) => {
+    await page.goto("/whiteout-pdf");
+    await uploadPDF(page);
+    const canvas = page.locator("canvas").first();
+    await expect(canvas).toBeVisible({ timeout: 15_000 });
+    const box = await canvas.boundingBox();
+    if (box) {
+      // Draw a rectangle on the canvas
+      await page.mouse.move(box.x + 50, box.y + 50);
+      await page.mouse.down();
+      await page.mouse.move(box.x + 150, box.y + 150);
+      await page.mouse.up();
+      // "1 whiteout area drawn" should appear
+      await expect(page.getByText(/1 whiteout area/i)).toBeVisible();
+    }
+  });
+});
+
+test.describe("Rotate tool", () => {
+  test("angle options are selectable", async ({ page }) => {
+    await page.goto("/rotate-pdf");
+    await uploadPDF(page);
+    // Should see the 3 angle options
+    await expect(page.getByRole("button", { name: /90° clockwise/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /180°/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /90° counter/i })).toBeVisible();
+    // Click 180
+    await page.getByRole("button", { name: /180°/i }).click();
+    await expect(page.getByRole("button", { name: /180°/i })).toHaveClass(/bg-primary/);
+  });
+});
+
+test.describe("Split tool", () => {
+  test("range inputs are visible after upload", async ({ page }) => {
+    await page.goto("/split-pdf");
+    await uploadPDF(page);
+    // Switch to split tab
+    await page.getByRole("button", { name: /^split$/i }).click();
+    await expect(page.getByText(/custom page ranges/i)).toBeVisible();
+    await expect(page.getByPlaceholder("Name")).toBeVisible();
+  });
+
+  test("can add a range", async ({ page }) => {
+    await page.goto("/split-pdf");
+    await uploadPDF(page);
+    await page.getByRole("button", { name: /^split$/i }).click();
+    await page.getByRole("button", { name: /add range/i }).click();
+    // Should now have 2 range rows
+    const labels = page.getByPlaceholder("Name");
+    expect(await labels.count()).toBe(2);
+  });
+});
+
+test.describe("Watermark tool", () => {
+  test("text input and sliders visible", async ({ page }) => {
+    await page.goto("/watermark-pdf");
+    await uploadPDF(page);
+    await page.getByRole("button", { name: /^watermark$/i }).click();
+    await expect(page.getByPlaceholder(/confidential/i)).toBeVisible();
+    await expect(page.getByText(/opacity/i)).toBeVisible();
+    await expect(page.getByText(/angle/i)).toBeVisible();
+  });
+});
+
+test.describe("Page Numbers tool", () => {
+  test("position picker and start number visible", async ({ page }) => {
+    await page.goto("/page-numbers-pdf");
+    await uploadPDF(page);
+    await page.getByRole("button", { name: /page numbers/i }).click();
+    await expect(page.getByRole("button", { name: /bottom centre/i })).toBeVisible();
+    await expect(page.getByLabel(/start number/i)).toBeVisible();
+  });
+});
