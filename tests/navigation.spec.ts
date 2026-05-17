@@ -80,7 +80,7 @@ test.describe("Header navigation", () => {
 
     await nav.getByRole("link", { name: /^edit$/i }).click();
     await expect(page).toHaveURL("/pdf-editor");
-    await expect(page.getByRole("heading", { name: /pdf editor/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /online pdf editor/i })).toBeVisible();
   });
 
   test("all tools mega-menu opens and stays open on hover", async ({ page }) => {

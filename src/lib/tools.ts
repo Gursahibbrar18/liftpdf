@@ -73,7 +73,7 @@ export const TOOLS: Tool[] = [
     name: "PDF Editor",
     description: "Add text, signatures, highlights, shapes and page operations in one workspace.",
     longDescription:
-      "Upload once, add visible text/signature/annotation overlays, apply page tools, keep editing and download when finished. Existing-text editing and image insertion are coming next.",
+      "Upload once, add visible text, signatures, images, highlights, shapes, whiteout areas and page operations, keep editing, then apply and download when finished. Existing PDF text editing is planned next.",
     category: "edit",
     icon: "Pencil",
     keywords: ["edit pdf", "pdf editor", "edit pdf text", "modify pdf"],

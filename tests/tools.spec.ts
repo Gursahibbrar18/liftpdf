@@ -164,16 +164,16 @@ test.describe("PDF Editor toolbar and overlays", () => {
   });
 
   test("text overlay controls are available by default", async ({ page }) => {
-    await expect(page.getByRole("heading", { name: /add text/i })).toBeVisible();
-    await expect(page.getByLabel(/^text$/i)).toBeVisible();
-    await expect(page.getByRole("button", { name: /apply text/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^text$/i })).toBeVisible();
+    await expect(page.getByText(/Click anywhere on a page to add text/i)).toBeVisible();
+    await expect(page.getByText(/Select a toolbar item, then click the PDF page/i)).toBeVisible();
   });
 
   test("sign overlay controls can be selected", async ({ page }) => {
     await toolbarButton(page, "Sign").click();
-    await expect(page.getByRole("heading", { name: /type signature/i })).toBeVisible();
-    await expect(page.getByLabel(/^text$/i)).toHaveValue("Your signature");
-    await expect(page.getByRole("button", { name: /apply signature/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^sign$/i })).toBeVisible();
+    await expect(page.getByText(/place a typed signature/i)).toBeVisible();
+    await expect(page.getByText(/Type signature/i)).toBeVisible();
   });
 });
 
@@ -229,7 +229,7 @@ test.describe("Delete Pages — thumbnail selection", () => {
     await thumbButton.click();
     // Workspace mode uses the shared Sejda-style "Apply changes" action after selection.
     await expect(page.getByText(/keeping 2 pages/i)).toBeVisible();
-    await expect(page.getByRole("button", { name: /apply changes/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^apply changes$/i }).first()).toBeVisible();
   });
 });
 
@@ -237,24 +237,19 @@ test.describe("Whiteout tool", () => {
   test("canvas appears after upload", async ({ page }) => {
     await page.goto("/whiteout-pdf");
     await uploadPDF(page);
-    // Canvas for drawing should appear (PDF.js renders first page)
-    await expect(page.locator("canvas")).toBeVisible({ timeout: 15_000 });
+    // The shared Sejda-style page canvas should appear after upload.
+    await expect(page.getByTestId("editor-page-1")).toBeVisible({ timeout: 15_000 });
   });
 
   test("can draw a whitebox on the canvas", async ({ page }) => {
     await page.goto("/whiteout-pdf");
     await uploadPDF(page);
-    const canvas = page.locator("canvas").first();
+    const canvas = page.getByTestId("editor-page-1");
     await expect(canvas).toBeVisible({ timeout: 15_000 });
     const box = await canvas.boundingBox();
     if (box) {
-      // Draw a rectangle on the canvas
-      await page.mouse.move(box.x + 50, box.y + 50);
-      await page.mouse.down();
-      await page.mouse.move(box.x + 150, box.y + 150);
-      await page.mouse.up();
-      // "1 whiteout area drawn" should appear
-      await expect(page.getByText(/1 whiteout area/i)).toBeVisible();
+      await page.mouse.click(box.x + 50, box.y + 50);
+      await expect(page.getByText(/1 pending edit/i)).toBeVisible();
     }
   });
 });
