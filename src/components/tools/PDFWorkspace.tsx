@@ -4,13 +4,14 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
 import {
   X, ZoomIn, Eraser, RotateCw, Trash2, Hash, Scissors, FileText, ChevronLeft, ChevronRight,
+  Type, FormInput, ImagePlus, PenLine, Highlighter, Shapes, Crop, Stamp, Layers,
 } from "lucide-react";
-import { Stamp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UploadZone } from "./UploadZone";
 import { downloadBytes } from "@/lib/download";
 import type { WorkspaceProcessResult } from "./types";
 
+const BasicOverlayTool = dynamic(() => import("./BasicOverlayTool").then(m => m.BasicOverlayTool), { ssr: false });
 const WhiteoutTool   = dynamic(() => import("./WhiteoutTool").then(m => m.WhiteoutTool), { ssr: false });
 const RotateTool     = dynamic(() => import("./RotateTool").then(m => m.RotateTool), { ssr: false });
 const DeletePagesTool= dynamic(() => import("./DeletePagesTool").then(m => m.DeletePagesTool), { ssr: false });
@@ -24,15 +25,24 @@ interface WorkspaceTool {
   icon: React.ElementType;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   component: React.ComponentType<any>;
+  props?: Record<string, unknown>;
+  limited?: boolean;
 }
 
 const WORKSPACE_TOOLS: WorkspaceTool[] = [
-  { slug: "whiteout-pdf",      label: "Whiteout",      icon: Eraser,    component: WhiteoutTool },
-  { slug: "rotate-pdf",        label: "Rotate",         icon: RotateCw,  component: RotateTool },
-  { slug: "delete-pdf-pages",  label: "Delete Pages",   icon: Trash2,    component: DeletePagesTool },
-  { slug: "watermark-pdf",     label: "Watermark",      icon: Stamp,     component: WatermarkTool },
-  { slug: "page-numbers-pdf",  label: "Page Numbers",   icon: Hash,      component: PageNumbersTool },
-  { slug: "split-pdf",         label: "Split",          icon: Scissors,  component: SplitTool },
+  { slug: "text",              label: "Text",           icon: Type,       component: BasicOverlayTool, props: { mode: "text" } },
+  { slug: "forms",             label: "Forms",          icon: FormInput,  component: ComingNextPanel, props: { title: "Forms are coming next", description: "Form field detection, checkboxes, and typed field filling will live here. For now, use Text and Sign to place visible content on the PDF." }, limited: true },
+  { slug: "image",             label: "Image",          icon: ImagePlus,  component: ComingNextPanel, props: { title: "Image insertion is coming next", description: "Upload an image, resize it, and place it on a page without leaving this editor." }, limited: true },
+  { slug: "sign",              label: "Sign",           icon: PenLine,    component: BasicOverlayTool, props: { mode: "sign" } },
+  { slug: "whiteout-pdf",      label: "Whiteout",       icon: Eraser,     component: WhiteoutTool },
+  { slug: "annotate",          label: "Annotate",       icon: Highlighter,component: BasicOverlayTool, props: { mode: "annotate" } },
+  { slug: "shapes",            label: "Shapes",         icon: Shapes,     component: BasicOverlayTool, props: { mode: "shape" } },
+  { slug: "crop-pdf",          label: "Crop",           icon: Crop,       component: ComingNextPanel, props: { title: "Crop is available soon", description: "Margin trimming and visible-area controls are planned for this workspace. You can continue applying other operations before downloading." }, limited: true },
+  { slug: "rotate-pdf",        label: "Rotate",         icon: RotateCw,   component: RotateTool },
+  { slug: "delete-pdf-pages",  label: "Delete Pages",   icon: Trash2,     component: DeletePagesTool },
+  { slug: "watermark-pdf",     label: "Watermark",      icon: Stamp,      component: WatermarkTool },
+  { slug: "page-numbers-pdf",  label: "Page Numbers",   icon: Hash,       component: PageNumbersTool },
+  { slug: "split-pdf",         label: "Split",          icon: Scissors,   component: SplitTool },
 ];
 
 export function PDFWorkspace({ initialTool }: { initialTool: string }) {
@@ -115,11 +125,38 @@ export function PDFWorkspace({ initialTool }: { initialTool: string }) {
 
   if (!file) {
     return (
-      <div className="bg-white rounded-2xl border border-border p-6 md:p-10">
-        <UploadZone onFiles={onFiles} label="Choose PDF file" />
-        <p className="text-center text-xs text-muted-foreground mt-4">
-          Upload once — then whiteout, rotate, delete pages, watermark, and more without re-uploading.
-        </p>
+      <div className="max-w-4xl mx-auto text-center py-8 md:py-14">
+        <div className="mb-8">
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-primary mb-3">PDF Editor</p>
+          <h1 className="text-3xl md:text-5xl font-bold tracking-tight text-foreground">
+            Edit PDF files online
+          </h1>
+          <p className="mt-4 text-base md:text-lg text-muted-foreground max-w-2xl mx-auto">
+            Upload a PDF once, then add text, signatures, highlights, shapes, watermarks, page numbers, rotate pages, delete pages, and download when you are done.
+          </p>
+        </div>
+
+        <div className="bg-white rounded-3xl border border-border shadow-sm p-4 md:p-8">
+          <UploadZone onFiles={onFiles} label="Upload PDF file" sublabel="or drag and drop your PDF here" />
+          <div className="flex flex-wrap items-center justify-center gap-2 mt-5 text-xs">
+            <span className="px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Computer</span>
+            {['Dropbox', 'Google Drive', 'OneDrive', 'Web Address'].map(source => (
+              <span key={source} className="px-3 py-1.5 rounded-full bg-slate-100 text-muted-foreground border border-border">{source} · coming soon</span>
+            ))}
+          </div>
+          <button disabled className="mt-5 text-sm text-muted-foreground cursor-not-allowed">
+            Start with a blank document — coming next
+          </button>
+        </div>
+
+        <div className="mt-6 grid sm:grid-cols-2 gap-3 text-left text-sm text-muted-foreground">
+          <div className="rounded-xl bg-white border border-border px-4 py-3">
+            <strong className="text-foreground">Private by design.</strong> Files are processed in your browser and are not uploaded to LiftPDF servers.
+          </div>
+          <div className="rounded-xl bg-white border border-border px-4 py-3">
+            <strong className="text-foreground">Free limits.</strong> Best for files up to 100 MB. For large batches, use the desktop/offline workflow coming later.
+          </div>
+        </div>
       </div>
     );
   }
@@ -146,11 +183,12 @@ export function PDFWorkspace({ initialTool }: { initialTool: string }) {
           </div>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0 sm:ml-4">
+          <span className="hidden md:inline text-xs text-muted-foreground">Apply multiple tools, then download once.</span>
           <button
             onClick={downloadCurrentPDF}
             className="px-3 py-2 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary/90 transition-colors"
           >
-            Download current PDF
+            Download
           </button>
           <button
             onClick={reset}
@@ -212,7 +250,7 @@ export function PDFWorkspace({ initialTool }: { initialTool: string }) {
         {/* Right: Tool panel */}
         <div className="flex-1 min-w-0 space-y-3">
           {/* Tool tabs */}
-          <div className="bg-white rounded-xl border border-border p-1.5 flex flex-wrap gap-1">
+          <div className="bg-white rounded-xl border border-border p-1.5 flex gap-1 overflow-x-auto">
             {WORKSPACE_TOOLS.map(tool => {
               const Icon = tool.icon;
               const isActive = activeTool === tool.slug;
@@ -221,7 +259,7 @@ export function PDFWorkspace({ initialTool }: { initialTool: string }) {
                   key={tool.slug}
                   onClick={() => setActiveTool(tool.slug)}
                   className={cn(
-                    "flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap",
+                    "relative flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap",
                     isActive
                       ? "bg-primary text-white shadow-sm"
                       : "text-muted-foreground hover:text-foreground hover:bg-accent"
@@ -229,6 +267,7 @@ export function PDFWorkspace({ initialTool }: { initialTool: string }) {
                 >
                   <Icon className="w-3.5 h-3.5" />
                   {tool.label}
+                  {tool.limited && <span className={cn("text-[10px]", isActive ? "text-white/75" : "text-amber-600")}>soon</span>}
                 </button>
               );
             })}
@@ -236,7 +275,7 @@ export function PDFWorkspace({ initialTool }: { initialTool: string }) {
 
           {/* Active tool controls */}
           <div className="bg-white rounded-xl border border-border p-5">
-            <ActiveComponent key={activeToolKey} file={file} thumbnails={thumbnails} onProcessed={applyProcessedFile} />
+            <ActiveComponent key={activeToolKey} file={file} thumbnails={thumbnails} onProcessed={applyProcessedFile} {...activeDef.props} />
           </div>
         </div>
       </div>
@@ -285,6 +324,30 @@ export function PDFWorkspace({ initialTool }: { initialTool: string }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ComingNextPanel({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center flex-shrink-0">
+            <Layers className="w-5 h-5 text-amber-600" />
+          </div>
+          <div>
+            <h2 className="font-semibold text-amber-950">{title}</h2>
+            <p className="text-sm text-amber-800 mt-1">{description}</p>
+          </div>
+        </div>
+      </div>
+      <div className="rounded-xl border border-border bg-slate-50 p-4 text-sm text-muted-foreground">
+        Workflow: keep using the available toolbar items on this uploaded file, then click Download in the top bar when finished.
+      </div>
+      <button disabled className="px-6 py-3 rounded-xl bg-muted text-muted-foreground cursor-not-allowed font-semibold text-sm">
+        Apply changes — coming next
+      </button>
     </div>
   );
 }

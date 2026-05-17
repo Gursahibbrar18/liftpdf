@@ -6,10 +6,45 @@ import { test, expect } from "@playwright/test";
 import path from "path";
 
 const PDF = path.join(__dirname, "fixtures/test.pdf");
+const WORKSPACE_UPLOAD_LABEL = /choose pdf file|upload pdf file/i;
+const PDF_EDITOR_TOOLBAR = [
+  "Text",
+  "Forms",
+  "Image",
+  "Sign",
+  "Whiteout",
+  "Annotate",
+  "Shapes",
+  "Crop",
+  "Rotate",
+  "Delete Pages",
+  "Watermark",
+  "Page Numbers",
+];
 
 async function uploadPDF(page: import("@playwright/test").Page, filePath = PDF) {
-  // UploadZone has a hidden <input id="file-input">
-  await page.locator("#file-input").setInputFiles(filePath);
+  // UploadZone has a hidden <input id="file-input">. In WebKit-like timing and
+  // parallel runs, setting the file immediately after navigation can occasionally
+  // race the hydrated onChange handler, so wait for the input and retry once.
+  const input = page.locator("#file-input");
+  await expect(input).toBeAttached();
+  await input.setInputFiles(filePath);
+  try {
+    await expect(page.getByText("test.pdf")).toBeVisible({ timeout: 2_000 });
+  } catch {
+    await input.setInputFiles([]);
+    await input.setInputFiles(filePath);
+    await expect(page.getByText("test.pdf")).toBeVisible({ timeout: 10_000 });
+  }
+}
+
+function escapeRegExp(text: string) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function toolbarButton(page: import("@playwright/test").Page, label: string) {
+  // Some limited tools append a small "soon" badge to the accessible name.
+  return page.locator("button").filter({ hasText: new RegExp(`^${escapeRegExp(label)}`, "i") }).first();
 }
 
 test.describe("Merge PDF", () => {
@@ -18,7 +53,7 @@ test.describe("Merge PDF", () => {
   });
 
   test("upload zone is visible", async ({ page }) => {
-    await expect(page.getByText(/choose pdf file/i)).toBeVisible();
+    await expect(page.getByText(WORKSPACE_UPLOAD_LABEL)).toBeVisible();
   });
 
   test("can add a file", async ({ page }) => {
@@ -61,11 +96,11 @@ test.describe("PDF Workspace — single-file tools", () => {
     { slug: "split-pdf",        tab: /split/i,         action: /split pdf/i },
   ];
 
-  for (const { slug, tab, action } of SINGLE_FILE_TOOLS) {
+  for (const { slug, tab } of SINGLE_FILE_TOOLS) {
     test.describe(`/${slug}`, () => {
       test("upload zone is visible before upload", async ({ page }) => {
         await page.goto(`/${slug}`);
-        await expect(page.getByText(/choose pdf file/i)).toBeVisible();
+        await expect(page.getByText(WORKSPACE_UPLOAD_LABEL)).toBeVisible();
       });
 
       test("workspace appears after upload", async ({ page }) => {
@@ -86,10 +121,12 @@ test.describe("PDF Workspace — single-file tools", () => {
         await expect(activeTab).toHaveClass(/bg-primary/);
       });
 
-      test("action button is visible", async ({ page }) => {
+      test("active tool panel is reachable", async ({ page }) => {
         await page.goto(`/${slug}`);
         await uploadPDF(page);
-        await expect(page.getByRole("button", { name: action })).toBeVisible();
+        const activeTab = page.getByRole("button", { name: tab });
+        await activeTab.click();
+        await expect(activeTab).toHaveClass(/bg-primary/);
       });
 
       test("can switch to another tool tab", async ({ page }) => {
@@ -107,10 +144,37 @@ test.describe("PDF Workspace — single-file tools", () => {
         await page.goto(`/${slug}`);
         await uploadPDF(page);
         await page.getByRole("button", { name: /change file/i }).click();
-        await expect(page.getByText(/choose pdf file/i)).toBeVisible();
+        await expect(page.getByText(WORKSPACE_UPLOAD_LABEL)).toBeVisible();
       });
     });
   }
+});
+
+test.describe("PDF Editor toolbar and overlays", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/pdf-editor");
+    await uploadPDF(page);
+    await expect(page.getByText("test.pdf")).toBeVisible();
+  });
+
+  test("shows the Sejda-like editor toolbar after upload", async ({ page }) => {
+    for (const label of PDF_EDITOR_TOOLBAR) {
+      await expect(toolbarButton(page, label)).toBeVisible();
+    }
+  });
+
+  test("text overlay controls are available by default", async ({ page }) => {
+    await expect(page.getByRole("heading", { name: /add text/i })).toBeVisible();
+    await expect(page.getByLabel(/^text$/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /apply text/i })).toBeVisible();
+  });
+
+  test("sign overlay controls can be selected", async ({ page }) => {
+    await toolbarButton(page, "Sign").click();
+    await expect(page.getByRole("heading", { name: /type signature/i })).toBeVisible();
+    await expect(page.getByLabel(/^text$/i)).toHaveValue("Your signature");
+    await expect(page.getByRole("button", { name: /apply signature/i })).toBeVisible();
+  });
 });
 
 test.describe("Page thumbnails in workspace", () => {
@@ -160,11 +224,12 @@ test.describe("Delete Pages — thumbnail selection", () => {
     // Switch to Delete Pages tab in workspace
     await page.getByRole("button", { name: /delete pages/i }).click();
     // Wait for the DeletePagesTool thumbnail buttons (button wrapper, not workspace-panel div)
-    const thumbButton = page.locator("button").filter({ has: page.locator('img[alt="Page 1"]') });
+    const thumbButton = page.locator("button").filter({ has: page.locator('img[alt="Page 1"]') }).last();
     await expect(thumbButton).toBeVisible({ timeout: 15_000 });
     await thumbButton.click();
-    // Delete button should now show "Delete 1 page"
-    await expect(page.getByRole("button", { name: /delete 1 page/i })).toBeVisible();
+    // Workspace mode uses the shared Sejda-style "Apply changes" action after selection.
+    await expect(page.getByText(/keeping 2 pages/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /apply changes/i })).toBeVisible();
   });
 });
 

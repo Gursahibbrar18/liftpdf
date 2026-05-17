@@ -13,7 +13,16 @@ const WORKSPACE_SLUGS = new Set([
   "watermark-pdf",
   "page-numbers-pdf",
   "delete-pdf-pages",
+  "fill-sign-pdf",
+  "annotate-pdf",
+  "crop-pdf",
 ]);
+
+const INITIAL_TOOL_MAP: Record<string, string> = {
+  "pdf-editor": "text",
+  "fill-sign-pdf": "sign",
+  "annotate-pdf": "annotate",
+};
 
 export function ToolWorkspace({ slug }: { slug: string }) {
   if (slug === "merge-pdf") {
@@ -25,7 +34,7 @@ export function ToolWorkspace({ slug }: { slug: string }) {
   }
 
   if (WORKSPACE_SLUGS.has(slug)) {
-    return <PDFWorkspace initialTool={slug} />;
+    return <PDFWorkspace initialTool={INITIAL_TOOL_MAP[slug] ?? slug} />;
   }
 
   return null;

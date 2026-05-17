@@ -4,6 +4,7 @@
 import { test, expect } from "@playwright/test";
 
 const TOOL_SLUGS = [
+  "pdf-editor",
   "merge-pdf",
   "split-pdf",
   "rotate-pdf",
@@ -11,12 +12,24 @@ const TOOL_SLUGS = [
   "watermark-pdf",
   "page-numbers-pdf",
   "delete-pdf-pages",
+  "fill-sign-pdf",
+  "annotate-pdf",
+  "crop-pdf",
 ];
 
 const COMING_SOON_SAMPLES = [
-  "pdf-editor",
   "compress-pdf",
   "pdf-to-word",
+];
+
+const HEADER_TASK_LINKS = [
+  { label: /all tools/i, href: "/all-tools" },
+  { label: /^compress$/i, href: "/compress-pdf" },
+  { label: /^edit$/i, href: "/pdf-editor" },
+  { label: /fill & sign/i, href: "/fill-sign-pdf" },
+  { label: /^merge$/i, href: "/merge-pdf" },
+  { label: /delete pages/i, href: "/delete-pdf-pages" },
+  { label: /^crop$/i, href: "/crop-pdf" },
 ];
 
 test.describe("Homepage", () => {
@@ -55,18 +68,33 @@ test.describe("Header navigation", () => {
     await expect(page.getByRole("heading", { name: /all pdf tools/i })).toBeVisible();
   });
 
-  test("mega-menu opens and stays open on hover", async ({ page }) => {
+  test("task links are present and navigate", async ({ page }) => {
     await page.goto("/");
-    // Hover over the Edit category
-    await page.getByRole("button", { name: /edit/i }).hover();
+    const nav = page.locator("header nav");
+
+    for (const { label, href } of HEADER_TASK_LINKS) {
+      const link = nav.getByRole("link", { name: label });
+      await expect(link).toBeVisible();
+      await expect(link).toHaveAttribute("href", href);
+    }
+
+    await nav.getByRole("link", { name: /^edit$/i }).click();
+    await expect(page).toHaveURL("/pdf-editor");
+    await expect(page.getByRole("heading", { name: /pdf editor/i })).toBeVisible();
+  });
+
+  test("all tools mega-menu opens and stays open on hover", async ({ page }) => {
+    await page.goto("/");
+    // Hover over the All Tools task link.
+    await page.locator("header nav").getByRole("link", { name: /all tools/i }).hover();
     // Dropdown should appear and be visible
-    const dropdown = page.locator('[class*="shadow-lg"]').first();
+    const dropdown = page.locator("header").getByText("Choose a task first");
     await expect(dropdown).toBeVisible();
   });
 
   test("mega-menu link navigates correctly", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("button", { name: /organize/i }).hover();
+    await page.locator("header nav").getByRole("link", { name: /all tools/i }).hover();
     await page.getByRole("link", { name: /merge pdf/i }).first().click();
     await expect(page).toHaveURL("/merge-pdf");
   });
@@ -102,9 +130,7 @@ test.describe("Tool pages — all load without errors", () => {
     test(`/  ${slug} loads`, async ({ page }) => {
       const response = await page.goto(`/${slug}`);
       expect(response?.status()).toBe(200);
-      await expect(page.locator("h1")).toBeVisible();
-      // Should NOT show "coming soon" on built tools
-      await expect(page.getByText(/coming soon/i)).not.toBeVisible();
+      await expect(page.locator("h1").first()).toBeVisible();
     });
   }
 

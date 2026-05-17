@@ -16,6 +16,9 @@ const BUILT_SLUGS = new Set([
   "watermark-pdf",
   "page-numbers-pdf",
   "delete-pdf-pages",
+  "fill-sign-pdf",
+  "annotate-pdf",
+  "crop-pdf",
 ]);
 
 interface Props {
@@ -138,8 +141,8 @@ export default async function ToolPage({ params }: Props) {
         </div>
 
         {/* Main tool area */}
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-          {tool.comingSoon || !BUILT_SLUGS.has(slug) ? (
+        <div className={cn("mx-auto px-4 sm:px-6 lg:px-8 py-10", BUILT_SLUGS.has(slug) ? "max-w-7xl" : "max-w-4xl")}>
+          {!BUILT_SLUGS.has(slug) ? (
             <ComingSoonCard name={tool.name} />
           ) : (
             <ToolWorkspace slug={slug} />

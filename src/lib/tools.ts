@@ -71,9 +71,9 @@ export const TOOLS: Tool[] = [
   {
     slug: "pdf-editor",
     name: "PDF Editor",
-    description: "Edit text, images, links and shapes directly in your PDF.",
+    description: "Add text, signatures, highlights, shapes and page operations in one workspace.",
     longDescription:
-      "Click any text to edit it. Add images, draw shapes, insert links and annotate — all without converting your file.",
+      "Upload once, add visible text/signature/annotation overlays, apply page tools, keep editing and download when finished. Existing-text editing and image insertion are coming next.",
     category: "edit",
     icon: "Pencil",
     keywords: ["edit pdf", "pdf editor", "edit pdf text", "modify pdf"],
@@ -91,9 +91,9 @@ export const TOOLS: Tool[] = [
   {
     slug: "annotate-pdf",
     name: "Annotate PDF",
-    description: "Highlight, strikethrough, underline and add sticky notes.",
+    description: "Highlight and mark up pages inside the shared PDF editor.",
     longDescription:
-      "Review documents with a full annotation toolkit — highlight in multiple colours, add comments, strikethrough text and draw freehand.",
+      "Review documents by applying highlight-style overlays and continuing with other PDF tools before final download. Sticky notes and freehand drawing are planned next.",
     category: "edit",
     icon: "Highlighter",
     keywords: ["annotate pdf", "highlight pdf", "comment pdf", "markup pdf"],
@@ -103,7 +103,7 @@ export const TOOLS: Tool[] = [
     name: "Fill & Sign PDF",
     description: "Fill out PDF forms and add your signature.",
     longDescription:
-      "Type into form fields, check boxes and draw or upload your signature. Download a signed PDF in seconds.",
+      "Add typed text and signatures in the shared editor, then keep applying other PDF changes before downloading. Field detection, checkboxes and drawn/uploaded signatures are planned next.",
     category: "edit",
     icon: "PenLine",
     keywords: [
