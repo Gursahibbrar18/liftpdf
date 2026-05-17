@@ -1,28 +1,28 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { Download, RefreshCw } from "lucide-react";
 import { UploadZone } from "./UploadZone";
 import { watermarkPDF } from "@/lib/pdf/watermark";
 import { downloadBytes } from "@/lib/download";
 import { cn } from "@/lib/utils";
+import type { WorkspaceProcessedHandler } from "./types";
 
 type Status = "idle" | "processing" | "done" | "error";
 
-interface Props { file?: File; thumbnails?: string[] }
+interface Props { file?: File; thumbnails?: string[]; onProcessed?: WorkspaceProcessedHandler }
 
-export function WatermarkTool({ file: fileProp }: Props = {}) {
-  const [file, setFile] = useState<File | null>(fileProp ?? null);
+export function WatermarkTool({ file: fileProp, onProcessed }: Props = {}) {
+  const [localFile, setLocalFile] = useState<File | null>(null);
   const [text, setText] = useState("CONFIDENTIAL");
   const [opacity, setOpacity] = useState(0.3);
   const [angle, setAngle] = useState(45);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState("");
-
-  useEffect(() => { if (fileProp) { setFile(fileProp); setStatus("idle"); } }, [fileProp]);
+  const file = fileProp ?? localFile;
 
   const onFiles = useCallback((files: File[]) => {
-    setFile(files[0]);
+    setLocalFile(files[0]);
     setStatus("idle");
   }, []);
 
@@ -31,8 +31,13 @@ export function WatermarkTool({ file: fileProp }: Props = {}) {
     setStatus("processing");
     setError("");
     try {
+      const filename = `watermarked-${file.name}`;
       const bytes = await watermarkPDF(file, { text, opacity, angle });
-      downloadBytes(bytes, `watermarked-${file.name}`);
+      if (onProcessed) {
+        await onProcessed({ bytes, filename, message: "Watermark applied. Keep editing or download when finished." });
+      } else {
+        downloadBytes(bytes, filename);
+      }
       setStatus("done");
     } catch {
       setError("Failed to add watermark. Please try again.");
@@ -42,6 +47,8 @@ export function WatermarkTool({ file: fileProp }: Props = {}) {
 
   if (!file) return <UploadZone onFiles={onFiles} label="Choose PDF to watermark" />;
 
+  const isWorkspace = Boolean(onProcessed);
+
   return (
     <div className="space-y-6">
       {!fileProp && (
@@ -50,7 +57,7 @@ export function WatermarkTool({ file: fileProp }: Props = {}) {
             <p className="font-medium text-sm">{file.name}</p>
             <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
           </div>
-          <button onClick={() => { setFile(null); setStatus("idle"); }} className="text-xs text-muted-foreground hover:text-foreground">Change file</button>
+          <button onClick={() => { setLocalFile(null); setStatus("idle"); }} className="text-xs text-muted-foreground hover:text-foreground">Change file</button>
         </div>
       )}
 
@@ -89,7 +96,7 @@ export function WatermarkTool({ file: fileProp }: Props = {}) {
             : status === "done" ? "bg-emerald-600 text-white"
             : "bg-primary text-white hover:bg-primary/90 shadow-lg shadow-primary/20")}>
         {status === "processing" ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-        {status === "processing" ? "Applying…" : status === "done" ? "Download again" : "Add Watermark"}
+        {status === "processing" ? "Applying…" : status === "done" ? (isWorkspace ? "Applied — keep editing" : "Download again") : (isWorkspace ? "Apply changes" : "Add Watermark")}
       </button>
     </div>
   );

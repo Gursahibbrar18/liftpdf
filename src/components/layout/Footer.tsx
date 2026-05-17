@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Zap } from "lucide-react";
-import { ALL_CATEGORIES, CATEGORY_META, getToolsByCategory } from "@/lib/tools";
+import { CATEGORY_META, getToolsByCategory } from "@/lib/tools";
 
 export function Footer() {
   return (

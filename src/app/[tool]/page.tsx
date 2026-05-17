@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 
 // All slugs that have a real working UI — everything else shows "Coming soon"
 const BUILT_SLUGS = new Set([
+  "pdf-editor",
   "merge-pdf",
   "split-pdf",
   "rotate-pdf",

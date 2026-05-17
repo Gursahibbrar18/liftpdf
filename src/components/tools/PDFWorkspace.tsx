@@ -3,11 +3,13 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
 import {
-  X, ZoomIn, ZoomOut, Eraser, RotateCw, Trash2, Hash, Scissors, FileText, ChevronLeft, ChevronRight,
+  X, ZoomIn, Eraser, RotateCw, Trash2, Hash, Scissors, FileText, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { Stamp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UploadZone } from "./UploadZone";
+import { downloadBytes } from "@/lib/download";
+import type { WorkspaceProcessResult } from "./types";
 
 const WhiteoutTool   = dynamic(() => import("./WhiteoutTool").then(m => m.WhiteoutTool), { ssr: false });
 const RotateTool     = dynamic(() => import("./RotateTool").then(m => m.RotateTool), { ssr: false });
@@ -41,6 +43,7 @@ export function PDFWorkspace({ initialTool }: { initialTool: string }) {
     WORKSPACE_TOOLS.find(t => t.slug === initialTool)?.slug ?? WORKSPACE_TOOLS[0].slug
   );
   const [zoomedPage, setZoomedPage] = useState<number | null>(null);
+  const [lastAppliedMessage, setLastAppliedMessage] = useState("");
   const thumbStripRef = useRef<HTMLDivElement>(null);
 
   const renderThumbnails = useCallback(async (f: File) => {
@@ -71,13 +74,31 @@ export function PDFWorkspace({ initialTool }: { initialTool: string }) {
   const onFiles = useCallback(async (files: File[]) => {
     const f = files[0];
     setFile(f);
+    setLastAppliedMessage("");
     renderThumbnails(f);
   }, [renderThumbnails]);
+
+  const applyProcessedFile = useCallback(async ({ bytes, filename, message }: WorkspaceProcessResult) => {
+    const safeBytes = new Uint8Array(bytes.length);
+    safeBytes.set(bytes);
+    const nextFile = new File([safeBytes], filename, { type: "application/pdf" });
+    setFile(nextFile);
+    setZoomedPage(null);
+    setLastAppliedMessage(message ?? "Changes applied. Keep editing or download when finished.");
+    await renderThumbnails(nextFile);
+  }, [renderThumbnails]);
+
+  const downloadCurrentPDF = useCallback(async () => {
+    if (!file) return;
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    downloadBytes(bytes, file.name);
+  }, [file]);
 
   const reset = useCallback(() => {
     setFile(null);
     setThumbnails([]);
     setZoomedPage(null);
+    setLastAppliedMessage("");
   }, []);
 
   // Keyboard nav for zoom modal
@@ -105,11 +126,12 @@ export function PDFWorkspace({ initialTool }: { initialTool: string }) {
 
   const activeDef = WORKSPACE_TOOLS.find(t => t.slug === activeTool) ?? WORKSPACE_TOOLS[0];
   const ActiveComponent = activeDef.component;
+  const activeToolKey = `${activeTool}:${file.name}:${file.size}:${file.lastModified}`;
 
   return (
     <div className="space-y-3">
       {/* File bar */}
-      <div className="flex items-center justify-between bg-white rounded-xl border border-border px-4 py-3">
+      <div className="flex flex-col gap-3 bg-white rounded-xl border border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
             <FileText className="w-4 h-4 text-primary" />
@@ -123,13 +145,27 @@ export function PDFWorkspace({ initialTool }: { initialTool: string }) {
             </p>
           </div>
         </div>
-        <button
-          onClick={reset}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 ml-4"
-        >
-          <X className="w-3.5 h-3.5" /> Change file
-        </button>
+        <div className="flex items-center gap-3 flex-shrink-0 sm:ml-4">
+          <button
+            onClick={downloadCurrentPDF}
+            className="px-3 py-2 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary/90 transition-colors"
+          >
+            Download current PDF
+          </button>
+          <button
+            onClick={reset}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X className="w-3.5 h-3.5" /> Change file
+          </button>
+        </div>
       </div>
+
+      {lastAppliedMessage && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl px-4 py-2 text-sm">
+          {lastAppliedMessage}
+        </div>
+      )}
 
       <div className="flex gap-3 items-start">
         {/* Left: Page thumbnail strip */}
@@ -200,7 +236,7 @@ export function PDFWorkspace({ initialTool }: { initialTool: string }) {
 
           {/* Active tool controls */}
           <div className="bg-white rounded-xl border border-border p-5">
-            <ActiveComponent file={file} thumbnails={thumbnails} />
+            <ActiveComponent key={activeToolKey} file={file} thumbnails={thumbnails} onProcessed={applyProcessedFile} />
           </div>
         </div>
       </div>

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { Download, RefreshCw } from "lucide-react";
 import { UploadZone } from "./UploadZone";
 import { addPageNumbers } from "@/lib/pdf/page-numbers";
 import { downloadBytes } from "@/lib/download";
 import { cn } from "@/lib/utils";
+import type { WorkspaceProcessedHandler } from "./types";
 
 type Status = "idle" | "processing" | "done" | "error";
 type Position = "bottom-center" | "bottom-right" | "bottom-left" | "top-center";
@@ -17,26 +18,30 @@ const POSITIONS: { value: Position; label: string }[] = [
   { value: "top-center", label: "Top centre" },
 ];
 
-interface Props { file?: File; thumbnails?: string[] }
+interface Props { file?: File; thumbnails?: string[]; onProcessed?: WorkspaceProcessedHandler }
 
-export function PageNumbersTool({ file: fileProp }: Props = {}) {
-  const [file, setFile] = useState<File | null>(fileProp ?? null);
+export function PageNumbersTool({ file: fileProp, onProcessed }: Props = {}) {
+  const [localFile, setLocalFile] = useState<File | null>(null);
   const [position, setPosition] = useState<Position>("bottom-center");
   const [startNumber, setStartNumber] = useState(1);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState("");
+  const file = fileProp ?? localFile;
 
-  useEffect(() => { if (fileProp) { setFile(fileProp); setStatus("idle"); } }, [fileProp]);
-
-  const onFiles = useCallback((files: File[]) => { setFile(files[0]); setStatus("idle"); }, []);
+  const onFiles = useCallback((files: File[]) => { setLocalFile(files[0]); setStatus("idle"); }, []);
 
   const handleApply = async () => {
     if (!file) return;
     setStatus("processing");
     setError("");
     try {
+      const filename = `numbered-${file.name}`;
       const bytes = await addPageNumbers(file, { position, startNumber });
-      downloadBytes(bytes, `numbered-${file.name}`);
+      if (onProcessed) {
+        await onProcessed({ bytes, filename, message: "Page numbers applied. Keep editing or download when finished." });
+      } else {
+        downloadBytes(bytes, filename);
+      }
       setStatus("done");
     } catch {
       setError("Failed to add page numbers. Please try again.");
@@ -46,6 +51,8 @@ export function PageNumbersTool({ file: fileProp }: Props = {}) {
 
   if (!file) return <UploadZone onFiles={onFiles} label="Choose PDF to number" />;
 
+  const isWorkspace = Boolean(onProcessed);
+
   return (
     <div className="space-y-6">
       {!fileProp && (
@@ -54,7 +61,7 @@ export function PageNumbersTool({ file: fileProp }: Props = {}) {
             <p className="font-medium text-sm">{file.name}</p>
             <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
           </div>
-          <button onClick={() => { setFile(null); setStatus("idle"); }} className="text-xs text-muted-foreground hover:text-foreground">Change file</button>
+          <button onClick={() => { setLocalFile(null); setStatus("idle"); }} className="text-xs text-muted-foreground hover:text-foreground">Change file</button>
         </div>
       )}
 
@@ -86,7 +93,7 @@ export function PageNumbersTool({ file: fileProp }: Props = {}) {
             : status === "done" ? "bg-emerald-600 text-white"
             : "bg-primary text-white hover:bg-primary/90 shadow-lg shadow-primary/20")}>
         {status === "processing" ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-        {status === "processing" ? "Adding numbers…" : status === "done" ? "Download again" : "Add Page Numbers"}
+        {status === "processing" ? (isWorkspace ? "Applying…" : "Adding numbers…") : status === "done" ? (isWorkspace ? "Applied — keep editing" : "Download again") : (isWorkspace ? "Apply changes" : "Add Page Numbers")}
       </button>
     </div>
   );

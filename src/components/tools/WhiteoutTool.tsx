@@ -3,9 +3,10 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Download, RefreshCw, Eraser, Trash2 } from "lucide-react";
 import { UploadZone } from "./UploadZone";
-import { whiteoutPDF, type WhiteoutRect } from "@/lib/pdf/whiteout";
+import { whiteoutPDF } from "@/lib/pdf/whiteout";
 import { downloadBytes } from "@/lib/download";
 import { cn } from "@/lib/utils";
+import type { WorkspaceProcessedHandler } from "./types";
 
 type Status = "idle" | "processing" | "done" | "error";
 
@@ -17,10 +18,10 @@ interface DrawRect {
   canvasW: number; canvasH: number;
 }
 
-interface Props { file?: File; thumbnails?: string[] }
+interface Props { file?: File; thumbnails?: string[]; onProcessed?: WorkspaceProcessedHandler }
 
-export function WhiteoutTool({ file: fileProp }: Props = {}) {
-  const [file, setFile] = useState<File | null>(fileProp ?? null);
+export function WhiteoutTool({ file: fileProp, onProcessed }: Props = {}) {
+  const [localFile, setLocalFile] = useState<File | null>(null);
   const [pageUrl, setPageUrl] = useState<string>("");
   const [pdfDims, setPdfDims] = useState({ width: 0, height: 0 });
   const [rects, setRects] = useState<DrawRect[]>([]);
@@ -30,6 +31,9 @@ export function WhiteoutTool({ file: fileProp }: Props = {}) {
   const [error, setError] = useState("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+  const file = fileProp ?? localFile;
+  const canvasWidth = Math.max(1, Math.round(pdfDims.width * 1.5));
+  const canvasHeight = Math.max(1, Math.round(pdfDims.height * 1.5));
 
   // Extracted so we can call it both from onFiles and useEffect
   const renderPreview = useCallback(async (f: File) => {
@@ -49,18 +53,29 @@ export function WhiteoutTool({ file: fileProp }: Props = {}) {
 
   // Auto-render when file prop is provided (workspace mode)
   useEffect(() => {
-    if (fileProp) {
-      setFile(fileProp);
-      setRects([]);
-      setStatus("idle");
-      renderPreview(fileProp);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!fileProp) return;
+    let cancelled = false;
+    (async () => {
+      const pdfjsLib = await import("pdfjs-dist");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+      const bytes = await fileProp.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({ scale: 1.5 });
+      const canvas = document.createElement("canvas");
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: canvas.getContext("2d")!, viewport, canvas }).promise;
+      if (cancelled) return;
+      setPdfDims({ width: viewport.width / 1.5, height: viewport.height / 1.5 });
+      setPageUrl(canvas.toDataURL("image/png"));
+    })();
+    return () => { cancelled = true; };
   }, [fileProp]);
 
   const onFiles = useCallback(async (files: File[]) => {
     const f = files[0];
-    setFile(f);
+    setLocalFile(f);
     setRects([]);
     setStatus("idle");
     renderPreview(f);
@@ -91,8 +106,12 @@ export function WhiteoutTool({ file: fileProp }: Props = {}) {
   }, [rects, current, pageUrl]);
 
   const getPos = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const rect = canvasRef.current!.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) * (canvas.width / rect.width),
+      y: (e.clientY - rect.top) * (canvas.height / rect.height),
+    };
   };
 
   const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -139,7 +158,13 @@ export function WhiteoutTool({ file: fileProp }: Props = {}) {
     try {
       const pdfRects = rects.map(({ page, x, y, width, height }) => ({ page, x, y, width, height }));
       const bytes = await whiteoutPDF(file, pdfRects);
-      downloadBytes(bytes, `whiteout-${file.name}`);
+      const filename = `whiteout-${file.name}`;
+      if (onProcessed) {
+        await onProcessed({ bytes, filename, message: "Whiteout applied. Keep editing or download when finished." });
+        setRects([]);
+      } else {
+        downloadBytes(bytes, filename);
+      }
       setStatus("done");
     } catch {
       setError("Whiteout failed. Please try again.");
@@ -158,6 +183,8 @@ export function WhiteoutTool({ file: fileProp }: Props = {}) {
     );
   }
 
+  const isWorkspace = Boolean(onProcessed);
+
   return (
     <div className="space-y-6">
       {!fileProp && (
@@ -166,7 +193,7 @@ export function WhiteoutTool({ file: fileProp }: Props = {}) {
             <p className="font-medium text-sm text-foreground">{file.name}</p>
             <p className="text-xs text-muted-foreground">{rects.length} whiteout area{rects.length !== 1 ? "s" : ""} drawn · Page 1 preview</p>
           </div>
-          <button onClick={() => { setFile(null); setRects([]); setStatus("idle"); }}
+          <button onClick={() => { setLocalFile(null); setRects([]); setStatus("idle"); }}
             className="text-xs text-muted-foreground hover:text-foreground">Change file</button>
         </div>
       )}
@@ -182,10 +209,8 @@ export function WhiteoutTool({ file: fileProp }: Props = {}) {
           <img ref={imgRef} src={pageUrl} alt="PDF preview" className="w-full block" />
           <canvas
             ref={canvasRef}
-            width={canvasRef.current?.parentElement?.clientWidth ?? 600}
-            height={canvasRef.current?.parentElement?.clientWidth
-              ? (canvasRef.current.parentElement!.clientWidth * pdfDims.height) / pdfDims.width
-              : 800}
+            width={canvasWidth}
+            height={canvasHeight}
             className="absolute inset-0 w-full h-full"
             onMouseDown={onMouseDown}
             onMouseMove={onMouseMove}
@@ -215,7 +240,7 @@ export function WhiteoutTool({ file: fileProp }: Props = {}) {
             : status === "done" ? "bg-emerald-600 text-white"
             : "bg-primary text-white hover:bg-primary/90 shadow-lg shadow-primary/20")}>
         {status === "processing" ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-        {status === "processing" ? "Applying…" : status === "done" ? "Download again" : "Apply & Download"}
+        {status === "processing" ? "Applying…" : status === "done" ? (isWorkspace ? "Applied — keep editing" : "Download again") : (isWorkspace ? "Apply changes" : "Apply & Download")}
       </button>
     </div>
   );

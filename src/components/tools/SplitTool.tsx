@@ -14,12 +14,13 @@ type Status = "idle" | "processing" | "done" | "error";
 interface Props { file?: File; thumbnails?: string[] }
 
 export function SplitTool({ file: fileProp }: Props = {}) {
-  const [file, setFile] = useState<File | null>(fileProp ?? null);
+  const [localFile, setLocalFile] = useState<File | null>(null);
   const [pageCount, setPageCount] = useState(0);
   const [mode, setMode] = useState<Mode>("ranges");
   const [ranges, setRanges] = useState<SplitRange[]>([{ label: "part-1", from: 1, to: 1 }]);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState("");
+  const file = fileProp ?? localFile;
 
   const loadPageCount = useCallback(async (f: File) => {
     const bytes = await f.arrayBuffer();
@@ -30,12 +31,22 @@ export function SplitTool({ file: fileProp }: Props = {}) {
   }, []);
 
   useEffect(() => {
-    if (fileProp) { setFile(fileProp); setStatus("idle"); loadPageCount(fileProp); }
-  }, [fileProp, loadPageCount]);
+    if (!fileProp) return;
+    let cancelled = false;
+    (async () => {
+      const bytes = await fileProp.arrayBuffer();
+      const doc = await PDFDocument.load(bytes);
+      if (cancelled) return;
+      const count = doc.getPageCount();
+      setPageCount(count);
+      setRanges([{ label: "part-1", from: 1, to: count }]);
+    })();
+    return () => { cancelled = true; };
+  }, [fileProp]);
 
   const onFiles = useCallback(async (files: File[]) => {
     const f = files[0];
-    setFile(f);
+    setLocalFile(f);
     setStatus("idle");
     loadPageCount(f);
   }, [loadPageCount]);
@@ -74,7 +85,7 @@ export function SplitTool({ file: fileProp }: Props = {}) {
             <p className="font-medium text-sm">{file.name}</p>
             <p className="text-xs text-muted-foreground">{pageCount} pages · {(file.size / 1024 / 1024).toFixed(2)} MB</p>
           </div>
-          <button onClick={() => { setFile(null); setStatus("idle"); }} className="text-xs text-muted-foreground hover:text-foreground">Change file</button>
+          <button onClick={() => { setLocalFile(null); setStatus("idle"); }} className="text-xs text-muted-foreground hover:text-foreground">Change file</button>
         </div>
       )}
 

@@ -6,6 +6,7 @@ const MergeTool    = dynamic(() => import("./MergeTool").then(m => m.MergeTool))
 const PDFWorkspace = dynamic(() => import("./PDFWorkspace").then(m => m.PDFWorkspace));
 
 const WORKSPACE_SLUGS = new Set([
+  "pdf-editor",
   "whiteout-pdf",
   "rotate-pdf",
   "split-pdf",

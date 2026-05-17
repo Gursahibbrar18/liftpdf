@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { RotateCw, Download, RefreshCw } from "lucide-react";
 import { UploadZone } from "./UploadZone";
 import { rotatePDF, type RotationAngle } from "@/lib/pdf/rotate";
 import { downloadBytes } from "@/lib/download";
 import { cn } from "@/lib/utils";
+import type { WorkspaceProcessedHandler } from "./types";
 
 type Status = "idle" | "processing" | "done" | "error";
 
@@ -15,18 +16,17 @@ const ANGLES: { label: string; value: RotationAngle; icon: string }[] = [
   { label: "90° counter-clockwise", value: 270, icon: "↺" },
 ];
 
-interface Props { file?: File; thumbnails?: string[] }
+interface Props { file?: File; thumbnails?: string[]; onProcessed?: WorkspaceProcessedHandler }
 
-export function RotateTool({ file: fileProp }: Props = {}) {
-  const [file, setFile] = useState<File | null>(fileProp ?? null);
+export function RotateTool({ file: fileProp, onProcessed }: Props = {}) {
+  const [localFile, setLocalFile] = useState<File | null>(null);
   const [angle, setAngle] = useState<RotationAngle>(90);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState("");
-
-  useEffect(() => { if (fileProp) { setFile(fileProp); setStatus("idle"); } }, [fileProp]);
+  const file = fileProp ?? localFile;
 
   const onFiles = useCallback((files: File[]) => {
-    setFile(files[0]);
+    setLocalFile(files[0]);
     setStatus("idle");
   }, []);
 
@@ -35,8 +35,13 @@ export function RotateTool({ file: fileProp }: Props = {}) {
     setStatus("processing");
     setError("");
     try {
+      const filename = `rotated-${file.name}`;
       const bytes = await rotatePDF(file, angle);
-      downloadBytes(bytes, `rotated-${file.name}`);
+      if (onProcessed) {
+        await onProcessed({ bytes, filename, message: "Rotation applied. Keep editing or download when finished." });
+      } else {
+        downloadBytes(bytes, filename);
+      }
       setStatus("done");
     } catch {
       setError("Rotation failed. The file may be corrupted or encrypted.");
@@ -46,6 +51,8 @@ export function RotateTool({ file: fileProp }: Props = {}) {
 
   if (!file) return <UploadZone onFiles={onFiles} label="Choose PDF to rotate" />;
 
+  const isWorkspace = Boolean(onProcessed);
+
   return (
     <div className="space-y-6">
       {!fileProp && (
@@ -54,7 +61,7 @@ export function RotateTool({ file: fileProp }: Props = {}) {
             <p className="font-medium text-sm text-foreground">{file.name}</p>
             <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
           </div>
-          <button onClick={() => { setFile(null); setStatus("idle"); }}
+          <button onClick={() => { setLocalFile(null); setStatus("idle"); }}
             className="text-xs text-muted-foreground hover:text-foreground">
             Change file
           </button>
@@ -98,7 +105,7 @@ export function RotateTool({ file: fileProp }: Props = {}) {
         )}
       >
         {status === "processing" ? <RefreshCw className="w-4 h-4 animate-spin" /> : status === "done" ? <Download className="w-4 h-4" /> : <RotateCw className="w-4 h-4" />}
-        {status === "processing" ? "Rotating…" : status === "done" ? "Download again" : "Rotate PDF"}
+        {status === "processing" ? (isWorkspace ? "Applying…" : "Rotating…") : status === "done" ? (isWorkspace ? "Applied — keep editing" : "Download again") : (isWorkspace ? "Apply changes" : "Rotate PDF")}
       </button>
     </div>
   );

@@ -1,48 +1,39 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { Download, RefreshCw, Trash2 } from "lucide-react";
+import { RefreshCw, Trash2 } from "lucide-react";
 import { UploadZone } from "./UploadZone";
 import { downloadBytes } from "@/lib/download";
 import { PDFDocument } from "pdf-lib";
 import { cn } from "@/lib/utils";
+import type { WorkspaceProcessedHandler } from "./types";
 
 type Status = "idle" | "processing" | "done" | "error";
 
-interface Props { file?: File; thumbnails?: string[] }
+interface Props { file?: File; thumbnails?: string[]; onProcessed?: WorkspaceProcessedHandler }
 
-export function DeletePagesTool({ file: fileProp, thumbnails = [] }: Props = {}) {
-  const [file, setFile]         = useState<File | null>(fileProp ?? null);
+export function DeletePagesTool({ file: fileProp, thumbnails = [], onProcessed }: Props = {}) {
+  const [localFile, setLocalFile] = useState<File | null>(null);
   const [pageCount, setPageCount] = useState(thumbnails.length || 0);
   const [toDelete, setToDelete] = useState<Set<number>>(new Set());
   const [status, setStatus]     = useState<Status>("idle");
   const [error, setError]       = useState("");
+  const file = fileProp ?? localFile;
+  const displayPageCount = thumbnails.length || pageCount;
 
-  // Load page count when file prop changes
+  // Load page count when no workspace thumbnails are available.
   useEffect(() => {
-    if (!fileProp) return;
-    setFile(fileProp);
-    setToDelete(new Set());
-    setStatus("idle");
-    if (thumbnails.length > 0) {
-      setPageCount(thumbnails.length);
-    } else {
-      fileProp.arrayBuffer().then(bytes =>
-        PDFDocument.load(bytes).then(doc => setPageCount(doc.getPageCount()))
-      );
-    }
-  }, [fileProp, thumbnails.length]);
-
-  // Keep pageCount in sync when thumbnails finish loading
-  useEffect(() => {
-    if (thumbnails.length > 0 && thumbnails.length !== pageCount) {
-      setPageCount(thumbnails.length);
-    }
-  }, [thumbnails.length, pageCount]);
+    if (!file || thumbnails.length > 0) return;
+    let cancelled = false;
+    file.arrayBuffer().then(bytes => PDFDocument.load(bytes)).then(doc => {
+      if (!cancelled) setPageCount(doc.getPageCount());
+    });
+    return () => { cancelled = true; };
+  }, [file, thumbnails.length]);
 
   const onFiles = useCallback(async (files: File[]) => {
     const f = files[0];
-    setFile(f);
+    setLocalFile(f);
     setToDelete(new Set());
     setStatus("idle");
     const bytes = await f.arrayBuffer();
@@ -53,26 +44,37 @@ export function DeletePagesTool({ file: fileProp, thumbnails = [] }: Props = {})
   const toggle = (i: number) =>
     setToDelete(prev => {
       const next = new Set(prev);
-      next.has(i) ? next.delete(i) : next.add(i);
+      if (next.has(i)) {
+        next.delete(i);
+      } else {
+        next.add(i);
+      }
       return next;
     });
 
   const handleDelete = async () => {
     if (!file || toDelete.size === 0) return;
-    if (toDelete.size >= pageCount) {
+    if (toDelete.size >= displayPageCount) {
       setError("You can't delete all pages — keep at least one.");
       return;
     }
     setStatus("processing");
     setError("");
     try {
-      const bytes = await file.arrayBuffer();
-      const src   = await PDFDocument.load(bytes);
+      const sourceBytes = await file.arrayBuffer();
+      const src   = await PDFDocument.load(sourceBytes);
       const doc   = await PDFDocument.create();
-      const keep  = Array.from({ length: pageCount }, (_, i) => i).filter(i => !toDelete.has(i));
+      const keep  = Array.from({ length: displayPageCount }, (_, i) => i).filter(i => !toDelete.has(i));
       const pages = await doc.copyPages(src, keep);
       pages.forEach(p => doc.addPage(p));
-      downloadBytes(await doc.save(), `deleted-pages-${file.name}`);
+      const bytes = await doc.save();
+      const filename = `deleted-pages-${file.name}`;
+      if (onProcessed) {
+        await onProcessed({ bytes, filename, message: "Selected pages deleted. Keep editing or download when finished." });
+        setToDelete(new Set());
+      } else {
+        downloadBytes(bytes, filename);
+      }
       setStatus("done");
     } catch {
       setError("Failed to delete pages. Please try again.");
@@ -83,6 +85,7 @@ export function DeletePagesTool({ file: fileProp, thumbnails = [] }: Props = {})
   if (!file) return <UploadZone onFiles={onFiles} label="Choose PDF to delete pages from" />;
 
   const useThumbnails = thumbnails.length > 0;
+  const isWorkspace = Boolean(onProcessed);
 
   return (
     <div className="space-y-5">
@@ -90,9 +93,9 @@ export function DeletePagesTool({ file: fileProp, thumbnails = [] }: Props = {})
         <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-border">
           <div>
             <p className="font-medium text-sm">{file.name}</p>
-            <p className="text-xs text-muted-foreground">{pageCount} pages · {toDelete.size} selected</p>
+            <p className="text-xs text-muted-foreground">{displayPageCount} pages · {toDelete.size} selected</p>
           </div>
-          <button onClick={() => { setFile(null); setToDelete(new Set()); setStatus("idle"); }}
+          <button onClick={() => { setLocalFile(null); setToDelete(new Set()); setStatus("idle"); }}
             className="text-xs text-muted-foreground hover:text-foreground">
             Change file
           </button>
@@ -103,7 +106,7 @@ export function DeletePagesTool({ file: fileProp, thumbnails = [] }: Props = {})
         {useThumbnails
           ? "Click a page to mark it for deletion. Red border = will be deleted."
           : "Click a page number to mark it for deletion. Red = will be deleted."}
-        {toDelete.size > 0 && ` · Keeping ${pageCount - toDelete.size} page${pageCount - toDelete.size !== 1 ? "s" : ""}.`}
+        {toDelete.size > 0 && ` · Keeping ${displayPageCount - toDelete.size} page${displayPageCount - toDelete.size !== 1 ? "s" : ""}.`}
       </p>
 
       {/* Thumbnail grid (workspace mode) */}
@@ -140,7 +143,7 @@ export function DeletePagesTool({ file: fileProp, thumbnails = [] }: Props = {})
       ) : (
         /* Numbered buttons fallback (standalone mode) */
         <div className="flex flex-wrap gap-2">
-          {Array.from({ length: pageCount }, (_, i) => (
+          {Array.from({ length: displayPageCount }, (_, i) => (
             <button
               key={i}
               onClick={() => toggle(i)}
@@ -173,9 +176,9 @@ export function DeletePagesTool({ file: fileProp, thumbnails = [] }: Props = {})
         )}
       >
         {status === "processing" ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-        {status === "processing" ? "Deleting…"
-          : status === "done"    ? "Download again"
-          : `Delete ${toDelete.size || ""} page${toDelete.size !== 1 ? "s" : ""}`}
+        {status === "processing" ? (isWorkspace ? "Applying…" : "Deleting…")
+          : status === "done"    ? (isWorkspace ? "Applied — keep editing" : "Download again")
+          : isWorkspace ? "Apply changes" : `Delete ${toDelete.size || ""} page${toDelete.size !== 1 ? "s" : ""}`}
       </button>
     </div>
   );
