@@ -37,6 +37,7 @@ interface EditorObject {
   shape?: ShapeKind;
   imageData?: string;
   imageType?: "png" | "jpg";
+  autoFocus?: boolean;
 }
 
 interface ToolbarTool {
@@ -253,13 +254,13 @@ export function PDFWorkspace({ initialTool }: { initialTool: string }) {
     }
     const base = { id: nextId(), page, x, y };
     let obj: EditorObject;
-    if (activeTool === "text") obj = { ...base, kind: "text", width: 0.24, height: 0.055, text: "New text", color: "#1d4ed8" };
-    else if (activeTool === "sign") obj = { ...base, kind: "signature", width: 0.28, height: 0.065, text: "Your signature", color: "#111827" };
+    if (activeTool === "text") obj = { ...base, kind: "text", width: 0.28, height: 0.065, text: "", color: "#1d4ed8", autoFocus: true };
+    else if (activeTool === "sign") obj = { ...base, kind: "signature", width: 0.32, height: 0.075, text: "", color: "#111827", autoFocus: true };
     else if (activeTool === "whiteout") obj = { ...base, kind: "whiteout", width: 0.22, height: 0.08, fill: "#ffffff" };
     else if (activeTool === "annotate") obj = { ...base, kind: "highlight", width: 0.26, height: 0.055, fill: "#fde047", color: "#facc15" };
     else if (activeTool === "shapes") obj = { ...base, kind: "shape", width: 0.22, height: 0.1, shape: "rectangle", color: "#2563eb" };
-    else if (activeTool === "forms") obj = { ...base, kind: "form", width: 0.32, height: 0.065, text: "Text field", color: "#2563eb" };
-    else if (activeTool === "links") obj = { ...base, kind: "link", width: 0.28, height: 0.06, text: "https://example.com", color: "#0ea5e9" };
+    else if (activeTool === "forms") obj = { ...base, kind: "form", width: 0.32, height: 0.065, text: "", color: "#2563eb", autoFocus: true };
+    else if (activeTool === "links") obj = { ...base, kind: "link", width: 0.28, height: 0.06, text: "", color: "#0ea5e9", autoFocus: true };
     else if (activeTool === "crop") obj = { ...base, kind: "crop", width: 0.5, height: 0.55, color: "#22c55e" };
     else obj = { ...base, kind: "image", width: 0.28, height: 0.18, imageData: imageDraft!.data, imageType: imageDraft!.type };
     setObjects(prev => [...prev, obj]);
@@ -447,7 +448,39 @@ export function PDFWorkspace({ initialTool }: { initialTool: string }) {
                 </div>
                 <div data-testid={`editor-page-${index + 1}`} data-editor-page className="relative mx-auto bg-white shadow-2xl ring-1 ring-black/10 cursor-crosshair" onClick={(e) => onPageClick(index + 1, e)}>
                   <img src={thumb} alt={`Page ${index + 1}`} className="block w-full select-none pointer-events-none" />
-                  {objects.filter(obj => obj.page === index + 1).map(obj => <EditableObject key={obj.id} obj={obj} selected={obj.id === selectedId} onSelect={(e) => { e.stopPropagation(); setSelectedId(obj.id); }} onPointerDown={(e) => { e.stopPropagation(); setSelectedId(obj.id); dragRef.current = { id: obj.id, startX: e.clientX, startY: e.clientY, originalX: obj.x, originalY: obj.y }; }} />)}
+                  {objects.filter(obj => obj.page === index + 1).map(obj => (
+                    <EditableObject
+                      key={obj.id}
+                      obj={obj}
+                      selected={obj.id === selectedId}
+                      onSelect={(e) => { e.stopPropagation(); setSelectedId(obj.id); }}
+                      onPointerDown={(e) => {
+                        if ((e.target as HTMLElement).closest("input, textarea, button, [data-resize-handle]")) return;
+                        e.stopPropagation();
+                        setSelectedId(obj.id);
+                        dragRef.current = { id: obj.id, startX: e.clientX, startY: e.clientY, originalX: obj.x, originalY: obj.y };
+                      }}
+                      onChange={(patch) => setObjects(prev => prev.map(item => item.id === obj.id ? { ...item, ...patch, autoFocus: false } : item))}
+                      onResize={(corner, e) => {
+                        e.stopPropagation();
+                        setSelectedId(obj.id);
+                        const pageEl = (e.currentTarget as HTMLElement).closest("[data-editor-page]") as HTMLElement | null;
+                        const rect = pageEl?.getBoundingClientRect();
+                        if (!rect) return;
+                        const startX = e.clientX;
+                        const startY = e.clientY;
+                        const start = { ...obj };
+                        const move = (ev: PointerEvent) => {
+                          const dx = (ev.clientX - startX) / rect.width;
+                          const dy = (ev.clientY - startY) / rect.height;
+                          setObjects(prev => prev.map(item => item.id === obj.id ? resizeObject(start, corner, dx, dy) : item));
+                        };
+                        const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+                        window.addEventListener("pointermove", move);
+                        window.addEventListener("pointerup", up);
+                      }}
+                    />
+                  ))}
                 </div>
                 <button disabled className="mx-auto flex items-center gap-1 rounded-full bg-white px-3 py-1 text-xs text-muted-foreground shadow-sm cursor-not-allowed"><Plus className="w-3 h-3" />Insert page here</button>
               </div>
@@ -498,24 +531,119 @@ function toolInstruction(tool: EditorTool, imageReady: boolean) {
   return "Use this page operation, then continue editing or download once.";
 }
 
-function EditableObject({ obj, selected, onSelect, onPointerDown }: { obj: EditorObject; selected: boolean; onSelect: (e: React.MouseEvent) => void; onPointerDown: (e: React.PointerEvent) => void }) {
+function resizeObject(obj: EditorObject, corner: "se" | "sw" | "ne" | "nw", dx: number, dy: number): EditorObject {
+  const minW = 0.04;
+  const minH = 0.025;
+  let { x, y, width, height } = obj;
+  if (corner.includes("e")) width = Math.max(minW, obj.width + dx);
+  if (corner.includes("s")) height = Math.max(minH, obj.height + dy);
+  if (corner.includes("w")) {
+    width = Math.max(minW, obj.width - dx);
+    x = Math.max(0, obj.x + dx);
+  }
+  if (corner.includes("n")) {
+    height = Math.max(minH, obj.height - dy);
+    y = Math.max(0, obj.y + dy);
+  }
+  return { ...obj, x: Math.max(0, Math.min(0.98, x)), y: Math.max(0, Math.min(0.98, y)), width: Math.min(1 - x, width), height: Math.min(1 - y, height), autoFocus: false };
+}
+
+function EditableObject({
+  obj,
+  selected,
+  onSelect,
+  onPointerDown,
+  onChange,
+  onResize,
+}: {
+  obj: EditorObject;
+  selected: boolean;
+  onSelect: (e: React.MouseEvent) => void;
+  onPointerDown: (e: React.PointerEvent) => void;
+  onChange: (patch: Partial<EditorObject>) => void;
+  onResize: (corner: "se" | "sw" | "ne" | "nw", e: React.PointerEvent) => void;
+}) {
+  const inputRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
+  useEffect(() => {
+    if (selected && obj.autoFocus) {
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      });
+    }
+  }, [selected, obj.autoFocus]);
+
   const style = { left: `${obj.x * 100}%`, top: `${obj.y * 100}%`, width: `${obj.width * 100}%`, height: `${obj.height * 100}%` };
   const classes = cn("absolute z-10 select-none cursor-move border-2", selected ? "border-primary ring-2 ring-primary/20" : "border-transparent hover:border-primary/50");
-  if (obj.kind === "text" || obj.kind === "signature") return <div data-editor-object-id={obj.id} onClick={onSelect} onPointerDown={onPointerDown} className={cn(classes, "bg-white/40 px-1 text-sm md:text-base font-medium")} style={{ ...style, color: obj.color }}>{obj.text}</div>;
-  if (obj.kind === "whiteout") return <div data-editor-object-id={obj.id} onClick={onSelect} onPointerDown={onPointerDown} className={classes} style={{ ...style, background: "white" }} />;
-  if (obj.kind === "highlight") return <div data-editor-object-id={obj.id} onClick={onSelect} onPointerDown={onPointerDown} className={classes} style={{ ...style, background: obj.fill, opacity: 0.6 }} />;
-  if (obj.kind === "image") return <img data-editor-object-id={obj.id} onClick={onSelect} onPointerDown={onPointerDown} src={obj.imageData} alt="Inserted image" className={classes} style={style} />;
-  if (obj.kind === "form") return <div data-editor-object-id={obj.id} onClick={onSelect} onPointerDown={onPointerDown} className={cn(classes, "bg-sky-50/80 text-sky-700 text-xs px-2 py-1")} style={style}>{obj.text}</div>;
-  if (obj.kind === "link") return <div data-editor-object-id={obj.id} onClick={onSelect} onPointerDown={onPointerDown} className={cn(classes, "bg-sky-200/20 text-sky-600 text-xs px-2 py-1 underline")} style={style}>Link area</div>;
-  if (obj.kind === "crop") return <div data-editor-object-id={obj.id} onClick={onSelect} onPointerDown={onPointerDown} className={cn(classes, "bg-emerald-300/10 border-dashed")} style={style}>Crop area</div>;
-  return <div data-editor-object-id={obj.id} onClick={onSelect} onPointerDown={onPointerDown} className={classes} style={{ ...style, borderColor: obj.color }} />;
+  const handles = selected && (
+    <>
+      {(["nw", "ne", "sw", "se"] as const).map(corner => (
+        <button
+          key={corner}
+          type="button"
+          data-resize-handle
+          aria-label={`Resize ${corner}`}
+          onPointerDown={(e) => onResize(corner, e)}
+          className={cn(
+            "absolute z-20 h-3 w-3 rounded-full border border-primary bg-white shadow",
+            corner === "nw" && "-left-1.5 -top-1.5 cursor-nwse-resize",
+            corner === "ne" && "-right-1.5 -top-1.5 cursor-nesw-resize",
+            corner === "sw" && "-left-1.5 -bottom-1.5 cursor-nesw-resize",
+            corner === "se" && "-right-1.5 -bottom-1.5 cursor-nwse-resize",
+          )}
+        />
+      ))}
+    </>
+  );
+
+  if (obj.kind === "text" || obj.kind === "signature" || obj.kind === "form" || obj.kind === "link") {
+    const label = obj.kind === "signature" ? "Edit signature on page" : obj.kind === "form" ? "Edit form field on page" : obj.kind === "link" ? "Edit link on page" : "Edit text on page";
+    const placeholder = obj.kind === "signature" ? "Type signature" : obj.kind === "form" ? "Type field value" : obj.kind === "link" ? "Paste link" : "Type text";
+    const isSignature = obj.kind === "signature";
+    const isForm = obj.kind === "form";
+    const isLink = obj.kind === "link";
+    return (
+      <div data-editor-object-id={obj.id} onClick={onSelect} onPointerDown={onPointerDown} className={cn(classes, "bg-white/25")} style={style}>
+        {isForm || isLink ? (
+          <input
+            ref={inputRef as React.RefObject<HTMLInputElement>}
+            aria-label={label}
+            value={obj.text ?? ""}
+            placeholder={placeholder}
+            onChange={(e) => onChange({ text: e.target.value })}
+            onClick={(e) => { e.stopPropagation(); onSelect(e); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            className={cn("h-full w-full bg-transparent px-2 text-xs outline-none", isForm ? "border border-sky-400 bg-sky-50/80 text-sky-800" : "text-sky-700 underline")}
+          />
+        ) : (
+          <textarea
+            ref={inputRef as React.RefObject<HTMLTextAreaElement>}
+            aria-label={label}
+            value={obj.text ?? ""}
+            placeholder={placeholder}
+            onChange={(e) => onChange({ text: e.target.value })}
+            onClick={(e) => { e.stopPropagation(); onSelect(e); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            className={cn("h-full w-full resize-none overflow-hidden bg-transparent px-1 leading-tight outline-none", isSignature ? "font-serif text-xl italic" : "text-sm md:text-base font-medium")}
+            style={{ color: obj.color }}
+          />
+        )}
+        {handles}
+      </div>
+    );
+  }
+  if (obj.kind === "whiteout") return <div data-editor-object-id={obj.id} onClick={onSelect} onPointerDown={onPointerDown} className={classes} style={{ ...style, background: "white" }}>{handles}</div>;
+  if (obj.kind === "highlight") return <div data-editor-object-id={obj.id} onClick={onSelect} onPointerDown={onPointerDown} className={classes} style={{ ...style, background: obj.fill, opacity: 0.6 }}>{handles}</div>;
+  if (obj.kind === "image") return <div data-editor-object-id={obj.id} onClick={onSelect} onPointerDown={onPointerDown} className={classes} style={style}><img src={obj.imageData} alt="Inserted image" className="h-full w-full object-contain pointer-events-none" />{handles}</div>;
+  if (obj.kind === "crop") return <div data-editor-object-id={obj.id} onClick={onSelect} onPointerDown={onPointerDown} className={cn(classes, "bg-emerald-300/10 border-dashed")} style={style}>Crop area{handles}</div>;
+  return <div data-editor-object-id={obj.id} onClick={onSelect} onPointerDown={onPointerDown} className={classes} style={{ ...style, borderColor: obj.color }}>{handles}</div>;
 }
 
 function PropertiesPanel({ obj, onChange, onDelete }: { obj: EditorObject; onChange: (patch: Partial<EditorObject>) => void; onDelete: () => void }) {
   return (
     <div className="space-y-3">
       <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Selected {obj.kind}</p>
-      {(obj.kind === "text" || obj.kind === "signature" || obj.kind === "form" || obj.kind === "link") && <label className="block text-sm font-medium text-foreground">Text<input value={obj.text ?? ""} onChange={(e) => onChange({ text: e.target.value })} className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary" /></label>}
+      {(obj.kind === "text" || obj.kind === "signature" || obj.kind === "form" || obj.kind === "link") && <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-800">Type directly in the selected box on the PDF page, Sejda-style. This side panel only controls style and size.</div>}
       {obj.kind === "shape" && <div><p className="text-sm font-medium text-foreground mb-2">Shape</p><div className="flex flex-wrap gap-2">{(["rectangle", "ellipse", "line", "arrow"] as ShapeKind[]).map(shape => <button key={shape} onClick={() => onChange({ shape })} className={cn("rounded-lg border px-2 py-1 text-xs capitalize", obj.shape === shape ? "border-primary bg-primary/10 text-primary" : "border-border")}>{shape}</button>)}</div></div>}
       {obj.kind !== "image" && obj.kind !== "whiteout" && <label className="block text-sm font-medium text-foreground">Color<input type="color" value={obj.color ?? obj.fill ?? "#2563eb"} onChange={(e) => onChange(obj.kind === "highlight" ? { fill: e.target.value, color: e.target.value } : { color: e.target.value })} className="mt-1 block h-10 w-20 rounded border border-border bg-white" /></label>}
       <div className="grid grid-cols-2 gap-2"><NumberInput label="Width %" value={Math.round(obj.width * 100)} onChange={(n) => onChange({ width: Math.max(0.02, n / 100) })} /><NumberInput label="Height %" value={Math.round(obj.height * 100)} onChange={(n) => onChange({ height: Math.max(0.02, n / 100) })} /></div>

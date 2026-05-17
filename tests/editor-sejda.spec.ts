@@ -51,11 +51,17 @@ test.describe("Sejda-like PDF editor", () => {
     const box = await pageCanvas.boundingBox();
     expect(box).toBeTruthy();
     await page.mouse.click(box!.x + 120, box!.y + 120);
+    const textEditor = page.getByRole("textbox", { name: /edit text on page/i });
+    await expect(textEditor).toBeFocused();
+    await textEditor.fill("New text");
     await expect(page.getByText("New text").first()).toBeVisible();
     await expect(page.getByText(/1 pending edit/i)).toBeVisible();
 
     await toolbarButton(page, "Sign").click();
     await page.mouse.click(box!.x + 150, box!.y + 180);
+    const signatureEditor = page.getByRole("textbox", { name: /edit signature on page/i });
+    await expect(signatureEditor).toBeFocused();
+    await signatureEditor.fill("Your signature");
     await expect(page.getByText("Your signature").first()).toBeVisible();
     await expect(page.getByText(/2 pending edits/i)).toBeVisible();
 
@@ -64,5 +70,35 @@ test.describe("Sejda-like PDF editor", () => {
     await expect(readyDialog.getByRole("heading", { name: /your document is ready/i })).toBeVisible({ timeout: 15_000 });
     await expect(readyDialog.getByRole("button", { name: /^download$/i })).toBeVisible();
     await expect(readyDialog.getByRole("button", { name: /back to editing/i })).toBeVisible();
+  });
+
+  test("text tool edits inline at the clicked page location without using the right panel", async ({ page }) => {
+    await uploadPDF(page);
+    await toolbarButton(page, "Text").click();
+
+    const pageCanvas = page.getByTestId("editor-page-1");
+    await expect(pageCanvas).toBeVisible({ timeout: 15_000 });
+    const box = await pageCanvas.boundingBox();
+    expect(box).toBeTruthy();
+
+    await pageCanvas.click({ position: { x: 180, y: 155 } });
+    const inlineEditor = page.getByRole("textbox", { name: /edit text on page/i });
+    await expect(inlineEditor).toBeFocused();
+    await inlineEditor.fill("Policy number ABC123");
+    await expect(page.getByText("Policy number ABC123").first()).toBeVisible();
+    await expect(page.getByText("New text")).toHaveCount(0);
+  });
+
+  test("signature tool lets the user type directly on the page", async ({ page }) => {
+    await uploadPDF(page);
+    await toolbarButton(page, "Sign").click();
+
+    const pageCanvas = page.getByTestId("editor-page-1");
+    await expect(pageCanvas).toBeVisible({ timeout: 15_000 });
+    await pageCanvas.click({ position: { x: 210, y: 220 } });
+    const inlineEditor = page.getByRole("textbox", { name: /edit signature on page/i });
+    await expect(inlineEditor).toBeFocused();
+    await inlineEditor.fill("Gursahib Brar");
+    await expect(page.getByText("Gursahib Brar").first()).toBeVisible();
   });
 });
