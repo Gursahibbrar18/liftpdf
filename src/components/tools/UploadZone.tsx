@@ -57,7 +57,10 @@ export function UploadZone({
         accept={accept}
         multiple={multiple}
         className="sr-only"
-        onChange={(e) => handleFiles(e.target.files)}
+        onChange={(e) => {
+          handleFiles(e.target.files);
+          e.currentTarget.value = "";
+        }}
       />
 
       <div className={cn(

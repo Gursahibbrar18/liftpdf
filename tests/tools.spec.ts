@@ -30,11 +30,11 @@ async function uploadPDF(page: import("@playwright/test").Page, filePath = PDF) 
   await expect(input).toBeAttached();
   await input.setInputFiles(filePath);
   try {
-    await expect(page.getByText("test.pdf")).toBeVisible({ timeout: 2_000 });
+    await expect(page.getByText("test.pdf").first()).toBeVisible({ timeout: 2_000 });
   } catch {
     await input.setInputFiles([]);
     await input.setInputFiles(filePath);
-    await expect(page.getByText("test.pdf")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("test.pdf").first()).toBeVisible({ timeout: 10_000 });
   }
 }
 
@@ -59,24 +59,20 @@ test.describe("Merge PDF", () => {
   test("can add a file", async ({ page }) => {
     await uploadPDF(page);
     // File name should appear in the list
-    await expect(page.getByText("test.pdf")).toBeVisible();
+    await expect(page.getByText("test.pdf").first()).toBeVisible();
   });
 
-  test("merge button appears after adding 2 files", async ({ page }) => {
-    // First file — verify the "add at least one more" hint
+  test("merge button appears after adding pages", async ({ page }) => {
     await uploadPDF(page);
-    await expect(page.getByText("test.pdf")).toBeVisible();
-    await expect(page.getByText(/add at least one more/i)).toBeVisible();
-    // Add 2 files at once — setInputFiles with same file twice doesn't re-fire onChange
-    await page.locator("#file-input").setInputFiles([PDF, PDF]);
-    // Merge button should now show total of 3 files
-    await expect(page.getByRole("button", { name: /merge \d+ pdfs/i })).toBeVisible();
+    await expect(page.getByTestId("merge-page-board")).toBeVisible();
+    await expect(page.getByTestId("merge-page-card")).toHaveCount(3);
+    await expect(page.getByRole("button", { name: /merge \d+ pages/i })).toBeVisible();
   });
 
   test("can add multiple files", async ({ page }) => {
     // First file
     await uploadPDF(page);
-    await expect(page.getByText("test.pdf")).toBeVisible();
+    await expect(page.getByText("test.pdf").first()).toBeVisible();
     // Add second file via the add more button
     const addMore = page.getByRole("button", { name: /add more/i });
     if (await addMore.isVisible()) {
@@ -107,7 +103,7 @@ test.describe("PDF Workspace — single-file tools", () => {
         await page.goto(`/${slug}`);
         await uploadPDF(page);
         // File bar should show the filename
-        await expect(page.getByText("test.pdf")).toBeVisible();
+        await expect(page.getByText("test.pdf").first()).toBeVisible();
         // All tool tabs should be visible
         await expect(page.getByRole("button", { name: tab })).toBeVisible();
       });
@@ -154,7 +150,7 @@ test.describe("PDF Editor toolbar and overlays", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/pdf-editor");
     await uploadPDF(page);
-    await expect(page.getByText("test.pdf")).toBeVisible();
+    await expect(page.getByText("test.pdf").first()).toBeVisible();
   });
 
   test("shows the Sejda-like editor toolbar after upload", async ({ page }) => {
